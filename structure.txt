@@ -1,0 +1,16 @@
+demo-pathfind-main/
+├── main.py
+├── .env
+├── requirements.txt
+├── src/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── database.py
+│   ├── models.py
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   └── pathfinding.py
+│   └── services/
+│       ├── __init__.py
+│       ├── weather_service.py
+│       └── pathfinding_service.py

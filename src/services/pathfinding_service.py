@@ -1,0 +1,30 @@
+import networkx as nx
+from .weather_service import predict_flood
+
+
+def find_smart_route(G_base, flood_model, start_node_id: int, end_node_id: int):
+    """Find smart routes with flood prediction"""
+    is_flooded_prediction = predict_flood(flood_model)
+
+    G_dynamic = G_base.copy()
+
+    if is_flooded_prediction == 1:
+        print("AI predicts flooding. Increasing travel costs...")
+        for u, v, data in G_dynamic.edges(data=True):
+            data['weight'] = data['length'] * 10
+    else:
+        print("Weather is clear. Using standard travel costs.")
+        for u, v, data in G_dynamic.edges(data=True):
+            data['weight'] = data['length']
+
+    try:
+        path = nx.astar_path(G_dynamic, source=start_node_id, target=end_node_id, weight='weight')
+        return {
+            "message": "Smart routes found!",
+            "is_flooded_predicted": bool(is_flooded_prediction),
+            "path": path
+        }
+    except nx.NetworkXNoPath:
+        return {"error": f"No path found between {start_node_id} and {end_node_id}"}
+    except Exception as e:
+        return {"error": f"An error occurred: {e}"}

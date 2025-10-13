@@ -1,0 +1,82 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environment variables (NEVER commit this!)
+.env
+.env.local
+.env.*.local
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+*.log
+logs/
+*.pot
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Models (optional - only if very large)
+# src/models/flood_model.joblib
+
+# OS specific
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# FastAPI/Uvicorn
+.uvicorn_cache
+
+# Docker (local development)
+.docker/
+
+# Data files (if large)
+data/
+*.csv
+*.geojson
+*.shp
+*.shx
+*.dbf
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Node modules (if using any frontend)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
