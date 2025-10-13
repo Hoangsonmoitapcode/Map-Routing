@@ -1,5 +1,5 @@
 import joblib
-from .config import MODEL_PATH
+from src.services.config import MODEL_PATH
 
 def load_flood_model():
     """Load AI model"""

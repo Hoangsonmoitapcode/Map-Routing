@@ -1,7 +1,7 @@
 import requests
 import pandas as pd
 from datetime import datetime
-from ..config import WEATHER_API_KEY, LATITUDE, LONGITUDE
+from src.services.config import WEATHER_API_KEY, LATITUDE, LONGITUDE
 
 
 def predict_flood(flood_model):
