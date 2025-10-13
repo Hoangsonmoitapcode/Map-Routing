@@ -1,16 +1,35 @@
 demo-pathfind-main/
-├── main.py
-├── .env
-├── requirements.txt
-├── src/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── database.py
-│   ├── models.py
-│   ├── routes/
+│
+├── .venv/                           # Môi trường ảo (virtual environment)
+│
+├── cache/                           # Thư mục lưu trữ cache tạm
+│
+├── src/                             # Mã nguồn chính của ứng dụng
+│   │
+│   ├── database/                    # Thư mục chứa logic làm việc với CSDL
+│   │   ├── cache/                   # Bộ nhớ tạm (nếu dùng caching DB)
+│   │   └── db_service.py            # Các hàm truy vấn hoặc xử lý dữ liệu
+│   │
+│   ├── models/                      # Lưu trữ mô hình AI/ML hoặc cấu trúc dữ liệu
+│   │   └── flood_model.joblib       # Mô hình dự đoán lũ lụt (đã train)
+│   │
+│   ├── routes/                      # Định nghĩa các endpoint (API routes)
 │   │   ├── __init__.py
-│   │   └── pathfinding.py
-│   └── services/
+│   │   └── path_finding.py          # API xử lý yêu cầu tìm đường
+│   │
+│   └── services/                    # Lớp trung gian xử lý nghiệp vụ (business logic)
 │       ├── __init__.py
-│       ├── weather_service.py
-│       └── pathfinding_service.py
+│       ├── pathfinding_service.py   # Service xử lý thuật toán tìm đường
+│       ├── weather_service.py       # Service xử lý dữ liệu thời tiết
+│       ├── config.py                # Cấu hình ứng dụng
+│       ├── database.py              # Kết nối và tương tác CSDL
+│       └── models.py                # Các lớp dữ liệu hoặc schema
+│
+├── .dockerignore                    # Các file/bản build Docker cần bỏ qua
+├── .env                             # Biến môi trường (API keys, DB_URL, v.v.)
+├── docker-compose.yml               # Cấu hình Docker Compose (chạy nhiều service)
+├── Dockerfile                       # Định nghĩa image Docker chính
+├── main.py                          # File khởi động chính của ứng dụng
+├── README.md                        # Mô tả project
+├── requirements.txt                 # Danh sách thư viện Python cần cài đặt
+└── structure.txt                    # Cấu trúc thư mục (file mô tả này)
