@@ -18,3 +18,12 @@ node_modules/
 *.egg-info
 dist/
 build/
+# Môi trường ảo
+.venv/
+
+# Cache của Python
+__pycache__/
+
+# Các file khác không cần thiết
+.git/
+.idea/

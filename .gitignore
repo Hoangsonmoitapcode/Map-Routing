@@ -53,7 +53,7 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
-
+endpoint.txt
 # FastAPI/Uvicorn
 .uvicorn_cache
 

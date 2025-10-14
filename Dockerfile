@@ -1,6 +1,11 @@
 # Start from an official, lightweight Python image
 FROM python:3.11-slim
 
+
+# Set environment variables for Python
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+
 # Set the working directory inside the container
 WORKDIR /app
 
@@ -13,8 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy all project files
 COPY . .
 
-# Create logs directory (optional, for debugging)
-RUN mkdir -p /app/logs
+# Expose the port the app runs on
+EXPOSE 8000
 
 # Command to run when container starts
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

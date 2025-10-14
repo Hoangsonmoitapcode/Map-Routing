@@ -1,7 +1,7 @@
-import matplotlib.pyplot as plt
 import osmnx as ox
 from sqlalchemy import create_engine, text
 import networkx as nx
+import os
 
 #sau sap nhap co 4 phuong
 places_names =[
@@ -45,11 +45,11 @@ print("Reset index, 'osmid' and others are now columns.")
 
 # 2. Tạo kết nối tới database PostGIS
 # !!! THAY THẾ CÁC THÔNG SỐ CỦA BẠN VÀO ĐÂY !!!
-db_user = 'postgres'
-db_password = '123456'
-db_host = 'localhost'
-db_port = '5432'
-db_name = 'map_route_dtb'
+db_user = os.getenv('POSTGRES_USER', 'postgres')
+db_password = os.getenv('POSTGRES_PASSWORD', '123456')
+db_host = os.getenv('POSTGRES_HOST', 'localhost')
+db_port = os.getenv('POSTGRES_PORT', '5432')
+db_name = os.getenv('POSTGRES_DB', 'map_route_dtb')
 
 engine = create_engine(f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}')
 print("da ket noi toi dtb.")
