@@ -1,35 +1,59 @@
-demo-pathfind-main/
-│
-├── .venv/                           # Môi trường ảo (virtual environment)
-│
-├── cache/                           # Thư mục lưu trữ cache tạm
-│
-├── src/                             # Mã nguồn chính của ứng dụng
-│   │
-│   ├── database/                    # Thư mục chứa logic làm việc với CSDL
-│   │   ├── cache/                   # Bộ nhớ tạm (nếu dùng caching DB)
-│   │   └── db_service.py            # Các hàm truy vấn hoặc xử lý dữ liệu
-│   │
-│   ├── models/                      # Lưu trữ mô hình AI/ML hoặc cấu trúc dữ liệu
-│   │   └── flood_model.joblib       # Mô hình dự đoán lũ lụt (đã train)
-│   │
-│   ├── routes/                      # Định nghĩa các endpoint (API routes)
+map-routing-project/
+├── .venv/                   # Thư mục môi trường ảo của Python
+├── backend/                 # Nơi chứa toàn bộ code FastAPI (Server-side)
+│   ├── app/                 # Thư mục chính của ứng dụng
 │   │   ├── __init__.py
-│   │   └── path_finding.py          # API xử lý yêu cầu tìm đường
+│   │   ├── api/             # Chứa các API endpoints (routers)
+│   │   │   ├── __init__.py
+│   │   │   └── v1/
+│   │   │       ├── __init__.py
+│   │   │       ├── endpoints/
+│   │   │       │   ├── __init__.py
+│   │   │       │   ├── routing.py     # API tìm đường, xử lý vùng cấm
+│   │   │       │   └── geodata.py     # API lấy geometry của đường, vùng...
+│   │   │       └── router.py      # Gộp các endpoints lại
+│   │   │
+│   │   ├── core/            # Cấu hình và các logic cốt lõi
+│   │   │   ├── __init__.py
+│   │   │   └── config.py      # Chứa các biến môi trường, chuỗi kết nối DB
+│   │   │
+│   │   ├── crud/            # Logic tương tác trực tiếp với Database (Create, Read, Update, Delete)
+│   │   │   ├── __init__.py
+│   │   │   └── crud_map.py    # Các hàm truy vấn PostGIS: lấy subgraph, tìm cạnh gần nhất...
+│   │   │
+│   │   ├── models/          # (Tùy chọn) ORM models nếu dùng (ví dụ: SQLAlchemy)
+│   │   │
+│   │   ├── schemas/         # Mô hình dữ liệu Pydantic để validate API request/response
+│   │   │   ├── __init__.py
+│   │   │   ├── route.py       # Schema cho yêu cầu tìm đường (start, end, forbidden_polygon)
+│   │   │   └── geo.py         # Schema cho GeoJSON
+│   │   │
+│   │   └── services/          # Nơi chứa business logic chính
+│   │       ├── __init__.py
+│   │       ├── routing_service.py # Logic chính: tải đồ thị, áp dụng vùng cấm, chạy A*
+│   │       └── geocoding_service.py # Logic xử lý clip đường, tìm geometry...
 │   │
-│   └── services/                    # Lớp trung gian xử lý nghiệp vụ (business logic)
-│       ├── __init__.py
-│       ├── pathfinding_service.py   # Service xử lý thuật toán tìm đường
-│       ├── weather_service.py       # Service xử lý dữ liệu thời tiết
-│       ├── config.py                # Cấu hình ứng dụng
-│       ├── database.py              # Kết nối và tương tác CSDL
-│       └── models.py                # Các lớp dữ liệu hoặc schema
+│   └── main.py              # File khởi chạy ứng dụng FastAPI
 │
-├── .dockerignore                    # Các file/bản build Docker cần bỏ qua
-├── .env                             # Biến môi trường (API keys, DB_URL, v.v.)
-├── docker-compose.yml               # Cấu hình Docker Compose (chạy nhiều service)
-├── Dockerfile                       # Định nghĩa image Docker chính
-├── main.py                          # File khởi động chính của ứng dụng
-├── README.md                        # Mô tả project
-├── requirements.txt                 # Danh sách thư viện Python cần cài đặt
-└── structure.txt                    # Cấu trúc thư mục (file mô tả này)
+├── database/                # Chứa các scripts liên quan đến database
+│   ├── migrations/          # (Nếu dùng Alembic) Chứa các file migration
+│   └── seed/                # Dữ liệu mẫu hoặc scripts tạo bảng ban đầu
+│       └── create_tables.sql
+│
+├── frontend/                # Nơi chứa toàn bộ code Streamlit (Client-side)
+│   ├── assets/              # Chứa ảnh, logo, file CSS tùy chỉnh
+│   ├── components/          # Các thành phần UI có thể tái sử dụng (ví dụ: bản đồ)
+│   │   └── map_component.py
+│   ├── pages/               # Mỗi file là một trang trên ứng dụng Streamlit
+│   │   ├── 1_📍_Tìm_đường.py
+│   │   └── 2_⛔️_Quản_lý_vùng_cấm.py
+│   ├── services/            # Các hàm gọi API từ frontend
+│   │   └── api_client.py
+│   └── Home.py              # Trang chủ của ứng dụng Streamlit
+│
+├── scripts/                 # Các scripts tiện ích (ví dụ: nạp dữ liệu)
+│   └── load_osm_data.sh     # Script bash để chạy osm2pgsql
+│
+├── .gitignore               # Các file và thư mục mà Git sẽ bỏ qua
+├── README.md                # Hướng dẫn cài đặt và sử dụng dự án
+└── requirements.txt         # Các thư viện Python cần thiết cho cả backend và frontend
