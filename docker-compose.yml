@@ -28,7 +28,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./cache:/app/cache
-    command: python src/database/db_service.py
+    command: python src/database/save_graph.py
     restart: "no"
 
   # Service 3: FastAPI application

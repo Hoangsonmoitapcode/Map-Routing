@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 import geopandas as gpd
 import osmnx as ox
-from src.services.config import DATABASE_URL
+from src.app.core.config import DATABASE_URL
 
 engine = create_engine(DATABASE_URL)
 

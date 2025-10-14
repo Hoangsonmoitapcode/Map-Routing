@@ -12,3 +12,8 @@ python-dotenv==1.0.0
 shapely==2.0.2
 geoalchemy2
 scikit-learn
+pydantic
+streamlit
+folium
+streamlit-folium
+shapely

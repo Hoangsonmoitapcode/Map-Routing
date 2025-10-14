@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from src.services.database import load_graph_from_db
-from src.services.models_loader import load_flood_model
-from src.routes.path_finding import init_routes
+from src.database.load_database import load_graph_from_db
+from src.app.models.models_loader import load_flood_model
+from src.app.api.path_finding import init_routes
 
 # Global variables
 G_base = None
@@ -18,10 +18,16 @@ async def lifespan(app: FastAPI):
     print("Starting up...")
     print("Loading map data from PostGIS...")
     G_base = load_graph_from_db()
+
     print("Loading flood prediction model...")
     flood_model = load_flood_model()
 
-    # Initialize routes with loaded data
+    if flood_model:
+        print("Flood model loaded successfully.")
+    else:
+        print("Running without flood prediction model. Smart routing disabled.")
+
+    # Initialize api with loaded data
     router = init_routes(G_base, flood_model)
     app.include_router(router)
 
