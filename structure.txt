@@ -1,59 +1,52 @@
-map-routing-project/
-├── .venv/                   # Thư mục môi trường ảo của Python
-├── backend/                 # Nơi chứa toàn bộ code FastAPI (Server-side)
-│   ├── app/                 # Thư mục chính của ứng dụng
-│   │   ├── __init__.py
-│   │   ├── api/             # Chứa các API endpoints (routers)
-│   │   │   ├── __init__.py
-│   │   │   └── v1/
-│   │   │       ├── __init__.py
-│   │   │       ├── endpoints/
-│   │   │       │   ├── __init__.py
-│   │   │       │   ├── routing.py     # API tìm đường, xử lý vùng cấm
-│   │   │       │   └── geodata.py     # API lấy geometry của đường, vùng...
-│   │   │       └── router.py      # Gộp các endpoints lại
-│   │   │
-│   │   ├── core/            # Cấu hình và các logic cốt lõi
-│   │   │   ├── __init__.py
-│   │   │   └── config.py      # Chứa các biến môi trường, chuỗi kết nối DB
-│   │   │
-│   │   ├── crud/            # Logic tương tác trực tiếp với Database (Create, Read, Update, Delete)
-│   │   │   ├── __init__.py
-│   │   │   └── crud_map.py    # Các hàm truy vấn PostGIS: lấy subgraph, tìm cạnh gần nhất...
-│   │   │
-│   │   ├── models/          # (Tùy chọn) ORM models nếu dùng (ví dụ: SQLAlchemy)
-│   │   │
-│   │   ├── schemas/         # Mô hình dữ liệu Pydantic để validate API request/response
-│   │   │   ├── __init__.py
-│   │   │   ├── route.py       # Schema cho yêu cầu tìm đường (start, end, forbidden_polygon)
-│   │   │   └── geo.py         # Schema cho GeoJSON
-│   │   │
-│   │   └── services/          # Nơi chứa business logic chính
-│   │       ├── __init__.py
-│   │       ├── routing_service.py # Logic chính: tải đồ thị, áp dụng vùng cấm, chạy A*
-│   │       └── geocoding_service.py # Logic xử lý clip đường, tìm geometry...
+=== CẤU TRÚC THƯ MỤC DỰ ÁN TÌM ĐƯỜỜNG (PHIÊN BẢN HOÀN CHỈNH) ===
+Workflow tổng quan:
+1. docker-compose.yml khởi chạy postgres (database).
+2. Các script trong src/database được chạy (thủ công hoặc qua Docker) để nạp dữ liệu vào DB.
+3. docker-compose.yml khởi chạy fastapi_app (dùng code trong src/app và main.py) để tạo Backend API.
+4. Người dùng chạy ứng dụng Streamlit (trong frontend) để tương tác.
+5. frontend gọi các endpoint trong src/app/api để yêu cầu xử lý.
+6. api nhận yêu cầu và gọi các hàm trong src/app/services để thực hiện logic.
+7. services có thể sẽ cần truy vấn PostGIS (map_data_service) hoặc dùng AI (weather_service).
+8. Kết quả được trả về frontend để hiển thị.
+.
+├── .env                    # (File) Chứa các biến môi trường nhạy cảm như mật khẩu DB, API keys. Không đưa lên Git.
+├── .gitignore              # (File) Liệt kê các file/folder mà Git sẽ bỏ qua (ví dụ: .venv, pycache, cache/).
+├── Dockerfile              # (File) "Bản thiết kế" để xây dựng Docker image cho ứng dụng Backend FastAPI.
+├── docker-compose.yml      # (File) "Nhạc trưởng" điều phối việc khởi chạy đồng thời các container (PostGIS, FastAPI).
+├── main.py                 # (File) Điểm khởi đầu của ứng dụng FastAPI. Rất gọn, chỉ để khởi tạo app và gộp các API router lại.
+├── README.md               # (File) Tài liệu hướng dẫn cài đặt, chạy và sử dụng toàn bộ dự án.
+├── requirements.txt        # (File) Liệt kê tất cả các thư viện Python cần thiết cho cả backend và frontend.
+├── structure.txt           # (File) Chính là file này, mô tả cấu trúc dự án.
+│
+├── frontend/               # (Folder) "Phòng điều khiển" - Chứa toàn bộ mã nguồn của ứng dụng giao diện người dùng.
+│   └── app_streamlit.py    # (File) Code chính của ứng dụng Streamlit: hiển thị bản đồ, công cụ vẽ, và logic gọi API.
+│
+└── src/                    # (Folder) "Source" - Chứa toàn bộ mã nguồn Python của dự án.
+│
+├── app/                # (Folder) "Nhà hàng" - Module chính chứa toàn bộ logic của ứng dụng Backend FastAPI.
 │   │
-│   └── main.py              # File khởi chạy ứng dụng FastAPI
+│   ├── api/            # (Folder) "Quầy Lễ tân" - Định nghĩa các API endpoints (URL) mà frontend có thể gọi vào.
+│   │   ├── analysis.py       # (File) Chứa endpoint phân tích, ví dụ: xem trước các đường bị ảnh hưởng bởi vùng cấm.
+│   │   ├── geocoding.py      # (File) Chứa endpoint để chuyển đổi địa chỉ dạng chữ sang tọa độ.
+│   │   └── path_finding.py   # (File) Chứa các endpoint chính để tìm đường: /get-route, /get-smart-route.
+│   │
+│   ├── core/           # (Folder) "Phòng Kỹ thuật" - Chứa các file cấu hình cốt lõi.
+│   │   └── config.py         # (File) Tải và quản lý các biến môi trường từ file .env.
+│   │
+│   ├── models/         # (Folder) "Kho Công cụ AI" - Chứa và quản lý các mô hình Machine Learning.
+│   │   ├── flood_model.joblib  # (File) Mô hình AI đã được huấn luyện để dự báo ngập lụt.
+│   │   └── models_loader.py    # (File) "Người thủ kho" - Tải file .joblib lên và chuẩn bị sẵn sàng.
+│   │
+│   ├── schemas/        # (Folder) "Biểu mẫu Dữ liệu" - Định nghĩa cấu trúc dữ liệu bằng Pydantic.
+│   │   └── route_input_format.py # (File) Định nghĩa một "Yêu cầu tìm đường" hợp lệ thì phải trông như thế nào.
+│   │
+│   └── services/       # (Folder) "Nhà bếp / Bộ não" - Chứa toàn bộ logic nghiệp vụ phức tạp.
+│       ├── geocoding_service.py    # (File) Logic để gọi đến dịch vụ bên ngoài như Nominatim.
+│       ├── map_data_service.py     # (File) Logic để tương tác với PostGIS (lấy subgraph, "cắt" đoạn đường...).
+│       ├── pathfinding_service.py  # (File) "Bếp trưởng" - Điều phối tất cả logic tìm đường.
+│       └── weather_service.py      # (File) Logic để gọi API thời tiết và dùng mô hình AI để dự báo.
 │
-├── database/                # Chứa các scripts liên quan đến database
-│   ├── migrations/          # (Nếu dùng Alembic) Chứa các file migration
-│   └── seed/                # Dữ liệu mẫu hoặc scripts tạo bảng ban đầu
-│       └── create_tables.sql
-│
-├── frontend/                # Nơi chứa toàn bộ code Streamlit (Client-side)
-│   ├── assets/              # Chứa ảnh, logo, file CSS tùy chỉnh
-│   ├── components/          # Các thành phần UI có thể tái sử dụng (ví dụ: bản đồ)
-│   │   └── map_component.py
-│   ├── pages/               # Mỗi file là một trang trên ứng dụng Streamlit
-│   │   ├── 1_📍_Tìm_đường.py
-│   │   └── 2_⛔️_Quản_lý_vùng_cấm.py
-│   ├── services/            # Các hàm gọi API từ frontend
-│   │   └── api_client.py
-│   └── Home.py              # Trang chủ của ứng dụng Streamlit
-│
-├── scripts/                 # Các scripts tiện ích (ví dụ: nạp dữ liệu)
-│   └── load_osm_data.sh     # Script bash để chạy osm2pgsql
-│
-├── .gitignore               # Các file và thư mục mà Git sẽ bỏ qua
-├── README.md                # Hướng dẫn cài đặt và sử dụng dự án
-└── requirements.txt         # Các thư viện Python cần thiết cho cả backend và frontend
+├── database/           # (Folder) "Xưởng Chuẩn bị Dữ liệu" - Chứa các script chạy một lần để thiết lập dữ liệu.
+│   ├── cache/              # (Folder) Chứa các file tạm do osmnx tải về để tăng tốc các lần chạy sau.
+│   ├── load_database.py    # (File) Chứa logic để TẢI dữ liệu từ nguồn bên ngoài (ví dụ: OpenStreetMap).
+│   └── save_graph.py       # (File) Chứa logic để LƯU dữ liệu đã xử lý vào database PostGIS.
