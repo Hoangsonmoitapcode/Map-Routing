@@ -6,6 +6,7 @@ env/
 *.egg-info/
 dist/
 build/
+/test_files
 
 # Python cache
 __pycache__/
