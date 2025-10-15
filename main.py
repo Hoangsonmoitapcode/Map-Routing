@@ -2,7 +2,9 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from src.database.load_database import load_graph_from_db
 from src.app.models.models_loader import load_flood_model
-from src.app.api.path_finding import init_routes
+
+
+from src.app.api.path_finding import init_routes  # Hoặc src.api.routes.path_finding
 
 # Global variables
 G_base = None
@@ -27,14 +29,19 @@ async def lifespan(app: FastAPI):
     else:
         print("Running without flood prediction model. Smart routing disabled.")
 
-    # Initialize api with loaded data
+    # ✅ Initialize router với G_base và flood_model
     router = init_routes(G_base, flood_model)
-    app.include_router(router)
+
+    # ✅ THÊM: Đăng ký router với prefix
+    app.include_router(
+        router,
+        prefix="/api/v1/routing",  # Thêm prefix để URL đẹp hơn
+        tags=["routing"]
+    )
 
     print("API Ready!")
 
     yield
-    # Cleanup nếu cần
     print("Shutting down...")
 
 
@@ -45,7 +52,6 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
-
 
 
 if __name__ == "__main__":
