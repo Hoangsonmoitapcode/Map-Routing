@@ -2,6 +2,7 @@
 
 import os
 from dotenv import load_dotenv
+from sqlalchemy import create_engine
 
 load_dotenv()
 
@@ -10,3 +11,5 @@ WEATHER_API_KEY = os.getenv("WEATHER_API_KEY", "d4b84d495c4303582c5835a354d9b3c9
 LATITUDE = float(os.getenv("LATITUDE", "21.0245"))
 LONGITUDE = float(os.getenv("LONGITUDE", "105.8412"))
 MODEL_PATH = os.getenv("MODEL_PATH", "src/app/models/flood_model.joblib")
+
+engine=create_engine(DATABASE_URL)
