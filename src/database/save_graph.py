@@ -15,7 +15,7 @@ places_names =[
 graphs=[]
 for place in places_names:
     print(f"dang tai {place}")
-    G=ox.graph_from_place(place, network_type='drive')
+    G=ox.graph_from_place(place, network_type='all')
     graphs.append(G)
 
 G = graphs[0]
