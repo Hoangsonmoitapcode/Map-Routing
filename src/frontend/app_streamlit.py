@@ -62,25 +62,9 @@ def load_or_create_graph():
 
         return G
 
-
-def sync_to_backend():
-    """
-    Gửi toàn bộ blocking_geometries về backend để lưu trữ
-    Returns: True nếu thành công, False nếu thất bại
-    """
-    try:
-        payload = {"blocking_geometries": st.session_state['blocking_geometries']}
-        response = requests.post(SAVE_BLOCKING_URL, json=payload, timeout=5)
-        response.raise_for_status()
-        return True
-    except Exception as e:
-        st.error(f"❌ Lỗi đồng bộ backend: {e}")
-        return False
-
-
 # --- Giao diện Streamlit ---
 st.set_page_config(layout="wide")
-st.title("🗺️ Công cụ tìm đường và quản lý giao thông")
+st.title("Công cụ tìm đường và quản lý giao thông")
 
 # --- Chia layout chính ---
 col1, col2 = st.columns([3, 2])  # 3 phần cho bản đồ, 2 phần cho bảng điều khiển
@@ -178,31 +162,23 @@ with col2:
 
     # Tab 2: Chọn đường theo địa chỉ
     with tab2:
-        st.subheader("🚧 Cấm/ngập một đoạn đường")
-        road_name_ban = st.text_input("Tên đường", key="ban_road_name")
-        from_address = st.text_input("Từ địa chỉ", key="ban_from_addr")
+        st.subheader("Cấm/ngập một đoạn đường")
+        road_name_ban = st.text_input("Tên đường, phố", key="ban_road_name", example="Đường Kim Ngưu/ Phố Lê Thanh Nghị")
+        from_address = st.text_input("Từ địa chỉ", key="ban_from_addr", example= "74/ Số 74")
         to_address = st.text_input("Đến địa chỉ", key="ban_to_addr")
 
         if st.button("Xem trước & Lấy GeoJSON"):
             if all([road_name_ban, from_address, to_address]):
                 payload = {
                     "street_name": road_name_ban,
-                    "start_address": f"{from_address}, {road_name_ban}",
+                    "start_address": f"{from_address}, {road_name_ban}",        #vi du 74 Phố Kim Ngưu
                     "end_address": f"{to_address}, {road_name_ban}"
                 }
                 try:
                     st.info("Đang gọi API để lấy geometry đoạn đường...")
-                    # response = requests.post(PREVIEW_SEGMENT_URL, json=payload)
-                    # response.raise_for_status()
-                    # segment_geojson = response.json()
-
-                    # --- PHẦN GIẢ LẬP KHI CHƯA CÓ BACKEND ---
-                    st.warning("Backend chưa chạy. Đây là dữ liệu giả lập.")
-                    segment_geojson = {
-                        "type": "LineString",
-                        "coordinates": [[105.80, 21.01], [105.81, 21.02]]
-                    }
-                    # --- KẾT THÚC PHẦN GIẢ LẬP ---
+                    response = requests.post(PREVIEW_SEGMENT_URL, json=payload)
+                    response.raise_for_status()
+                    segment_geojson = response.json()
 
                     st.write("GeoJSON của đoạn đường:")
                     st.json(segment_geojson)
@@ -217,7 +193,7 @@ with col2:
                 st.warning("Vui lòng nhập đủ thông tin.")
 
         st.divider()
-        st.subheader("↔️ Thiết lập đường một chiều")
+        st.subheader("Thiết lập đường một chiều")
         st.write("(Tính năng đang phát triển)")
         oneway_road = st.text_input("Tên đường", key="oneway_road_name")
         oneway_from = st.text_input("Một chiều từ địa chỉ", key="oneway_from_addr")

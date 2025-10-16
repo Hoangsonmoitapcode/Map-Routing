@@ -1,170 +1,85 @@
 # src/app/api/path_finding.py
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
-import osmnx as ox
+from typing import Optional
 import networkx as nx
 
-from src.services.geocoding_service import get_coords_tuple
-from src.services.weight_service import apply_dynamic_weights
-from src.services.pathfinding_service import find_smart_route, find_standard_route
+from src.services import geocoding_service, pathfinding_service
+from src.app.schemas.route_input_format import RouteRequest, Point
 
 _G_base: Optional[nx.MultiDiGraph] = None
 _flood_model = None
 
 
-def init_routes(G_base: nx.MultiDiGraph, flood_model):  # ✅ Thêm type hint
+def init_routes(G_base: nx.MultiDiGraph, flood_model):
     """
     Khởi tạo router với graph và model đã load từ main.py
     """
     global _G_base, _flood_model
     _G_base = G_base
     _flood_model = flood_model
-
     return router
 
 
 router = APIRouter()
 
 
-class RouteRequest(BaseModel):
-    start_address: str
-    end_address: str
-    blocking_geometries: List[Dict[str, Any]] = []
-
-"""
-    Workflow:
-    1. Geocode địa chỉ
-    2. Gọi weight_service → nhận G_modified
-    3. Gọi pathfinding_service → tìm đường
-    4. Convert path → GeoJSON
-"""
-
-@router.post("/find-route", summary="Tìm đường thông minh với blocking conditions")
+@router.post("/find-route", summary="Tìm đường thông minh với model dự đoán ngập")
 def find_route_endpoint(request: RouteRequest):
+    """
+    ⚠️ CHƯA IMPLEMENT - Dành cho tương lai
+    """
+    raise HTTPException(
+        status_code=501,
+        detail="Smart route với flood model chưa được implement. Vui lòng dùng /find-standard-route"
+    )
 
+
+@router.post("/find-standard-route", summary="Tìm đường tiêu chuẩn")
+def find_standard_route_endpoint(
+        start_address: str,
+        end_address: str,
+        blocking_geometries: list = None
+):
+    """
+    Tìm đường tiêu chuẩn từ địa chỉ A đến địa chỉ B.
+
+    Args:
+        start_address: Địa chỉ bắt đầu
+        end_address: Địa chỉ kết thúc
+        blocking_geometries: Danh sách vùng cấm (GeoJSON format)
+    """
     try:
-        # 1. Geocode
-        start_lat, start_lon = get_coords_tuple(request.start_address)
-        end_lat, end_lon = get_coords_tuple(request.end_address)
-
-        # 2. Sử dụng G_base đã được load từ main.py
+        # 1. Kiểm tra graph đã load chưa
         if _G_base is None:
             raise HTTPException(status_code=500, detail="Graph chưa được load")
 
-        # 3. Gọi weight_service
-        G_modified, metadata = apply_dynamic_weights(
-            _G_base,
-            blocking_geometries=request.blocking_geometries,
-            flood_model=_flood_model
+        # 2. Geocode địa chỉ → tọa độ
+        start_coords = geocoding_service.get_coords_from_address(start_address)
+        end_coords = geocoding_service.get_coords_from_address(end_address)
+
+        # 3. Tạo RouteRequest object
+        route_request = RouteRequest(
+            start_point=Point(
+                lat=start_coords["latitude"],
+                lon=start_coords["longitude"]
+            ),
+            end_point=Point(
+                lat=end_coords["latitude"],
+                lon=end_coords["longitude"]
+            ),
+            blocking_geometries=blocking_geometries or []
         )
 
-        # 4. Tìm nearest nodes
-        # ✅ SỬA: Dùng ox.nearest_nodes thay vì ox.distance.nearest_nodes
-        start_node = ox.nearest_nodes(G_modified, start_lon, start_lat)
-        end_node = ox.nearest_nodes(G_modified, end_lon, end_lat)
+        # 4. Gọi pathfinding service
+        result = pathfinding_service.find_standard_route(route_request, _G_base)
 
-        # 5. Gọi pathfinding_service
-        result = find_smart_route(G_modified, start_node, end_node)
-
+        # 5. Xử lý lỗi
         if "error" in result:
             raise HTTPException(status_code=404, detail=result["error"])
 
-        # 6. Convert path → GeoJSON
-        path = result["path"]
-        route_geojson = _path_to_geojson(G_modified, path)
-        distance = _calculate_distance(G_modified, path)
-        duration = _calculate_duration(distance)
-
-        return {
-            "route": route_geojson,
-            "distance": distance,
-            "duration": duration,
-            "nodes": path,
-            "metadata": metadata
-        }
+        return result
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/find-standard-route", summary="Tìm đường tiêu chuẩn (không blocking)")
-def find_standard_route_endpoint(request: RouteRequest):
-    """Tìm đường tiêu chuẩn không có điều kiện gì"""
-    try:
-        # Geocode
-        start_lat, start_lon = get_coords_tuple(request.start_address)
-        end_lat, end_lon = get_coords_tuple(request.end_address)
-
-        # Sử dụng G_base đã load
-        if _G_base is None:
-            raise HTTPException(status_code=500, detail="Graph chưa được load")
-
-        # Tìm nearest nodes
-        start_node = ox.nearest_nodes(_G_base, start_lon, start_lat)
-        end_node = ox.nearest_nodes(_G_base, end_lon, end_lat)
-
-        # Gọi pathfinding_service
-        result = find_standard_route(_G_base, start_node, end_node)
-
-        if "error" in result:
-            raise HTTPException(status_code=404, detail=result["error"])
-
-        # Convert
-        path = result["path"]
-        route_geojson = _path_to_geojson(_G_base, path)
-        distance = _calculate_distance(_G_base, path)
-        duration = _calculate_duration(distance)
-
-        return {
-            "route": route_geojson,
-            "distance": distance,
-            "duration": duration,
-            "nodes": path
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ===== HELPER FUNCTIONS =====
-
-def _path_to_geojson(G, path):
-    """Convert path → GeoJSON"""
-    coords = []
-    for node_id in path:
-        node_data = G.nodes[node_id]
-        if 'lon' in node_data and 'lat' in node_data:
-            coords.append([node_data['lon'], node_data['lat']])
-        elif 'x' in node_data and 'y' in node_data:
-            coords.append([node_data['x'], node_data['y']])
-
-    return {
-        "type": "Feature",
-        "geometry": {
-            "type": "LineString",
-            "coordinates": coords
-        },
-        "properties": {"node_count": len(path)}
-    }
-
-
-def _calculate_distance(G, path):
-    """Tính khoảng cách (meters)"""
-    total = 0.0
-    for i in range(len(path) - 1):
-        u, v = path[i], path[i + 1]
-        if G.has_edge(u, v):
-            edge_data = list(G[u][v].values())[0]
-            total += edge_data.get('length', 0)
-    return total
-
-
-def _calculate_duration(distance_m):
-    """Tính thời gian (phút)"""
-    distance_km = distance_m / 1000
-    return (distance_km / 25) * 60  # 25 km/h
+        raise HTTPException(status_code=500, detail=f"Lỗi không mong muốn: {str(e)}")
