@@ -6,60 +6,60 @@ from src.app.models.models_loader import load_flood_model
 from src.app.api.geocoding import router as geocoding_router
 from src.app.api.path_finding import init_routes as init_pathfinding_routes
 
-# Global variables
+# global variables
 G_base = None
 flood_model = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load data at startup"""
+    """load data at startup"""
     global G_base, flood_model
 
-    print("Starting up...")
-    print("Loading map data from PostGIS...")
+    print("starting up...")
+    print("loading map data from postgis...")
     G_base = load_graph_from_db()
 
-    print("Loading flood prediction model...")
+    print("loading flood prediction model...")
     flood_model = load_flood_model()
 
     if flood_model:
-        print("Flood model loaded successfully.")
+        print("flood model loaded successfully.")
     else:
-        print("Running without flood prediction model. Smart routing disabled.")
+        print("running without flood prediction model. smart routing disabled.")
 
-    # ✅ Initialize pathfinding router
+    # ✅ initialize pathfinding router
     pathfinding_router = init_pathfinding_routes(G_base, flood_model)
 
-    # ✅ Đăng ký pathfinding router
+    # ✅ đăng ký pathfinding router
     app.include_router(
         pathfinding_router,
         prefix="/api/v1/routing",
-        tags=["Routing"]
+        tags=["routing"]
     )
 
-    # ✅ Đăng ký geocoding router
+    # ✅ đăng ký geocoding router
     app.include_router(
         geocoding_router,
         prefix="/api/v1/geocoding",
-        tags=["Geocoding"]
+        tags=["geocoding"]
     )
 
-    print("API Ready!")
+    print("api ready!")
 
     yield
-    print("Shutting down...")
+    print("shutting down...")
 
 
 app = FastAPI(
     lifespan=lifespan,
-    title="Smart Routing API",
-    description="API for smart routing and geocoding services",
+    title="smart routing api",
+    description="api for smart routing and geocoding services",
     version="1.0.0"
 )
 
 
-@app.get("/health", tags=["Health"])
+@app.get("/health", tags=["health"])
 def health_check():
     return {"status": "healthy"}
 
