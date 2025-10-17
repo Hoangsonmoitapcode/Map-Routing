@@ -1,94 +1,89 @@
+# src/services/pathfinding_service.py
 import networkx as nx
 import osmnx as ox
-import geopandas as gpd
+from shapely.geometry import LineString, MultiLineString
+from shapely.ops import linemerge
 
-# Import các service và schema cần thiết
 from . import map_data_service, weight_service
 from src.app.schemas.route_input_format import RouteRequest
 
 
-# ======================================================================
-# HÀM FIND_SMART_ROUTE (GIỮ NGUYÊN ĐỂ PHÁT TRIỂN SAU)
-# ======================================================================
-
 def find_smart_route(G_modified: nx.MultiDiGraph, start_node_id: int, end_node_id: int) -> dict:
-    """
-   Tìm đường THÔNG MINH trên graph đã được modify bởi weight_service, sử dụng trọng số 'weight'.
-   """
     try:
         path = nx.astar_path(G_modified, source=start_node_id, target=end_node_id, weight='weight')
         return {"path": path}
     except nx.NetworkXNoPath:
-        return {"error": f"No path found between {start_node_id} and {end_node_id}"}
+        return {"error": f"no path found between {start_node_id} and {end_node_id}"}
 
-# CÁC HÀM NỘI BỘ ĐỂ CHUẨN BỊ ĐỒ THỊ
 
 def _prepare_dynamic_subgraph(request: RouteRequest, G_base: nx.MultiDiGraph) -> nx.MultiDiGraph | None:
-    """
-    ✅ HÀM ĐÃ TỐI ƯU: Sử dụng toàn bộ đồ thị từ database thay vì subgraph.
-    Chỉ áp dụng các điều kiện cấm/ngập.
-    """
-    # BƯỚC 1: SỬ DỤNG TOÀN BỘ ĐỒ THỊ
-    print("1. Sử dụng toàn bộ đồ thị từ database...")
     if not G_base or not G_base.nodes:
-        print("   -> Lỗi: Đồ thị cơ sở không tồn tại.")
         return None
-    print(f"   -> Đang sử dụng đồ thị với {len(G_base.nodes)} nodes và {len(G_base.edges)} edges.")
 
-    # BƯỚC 2: ÁP DỤNG CÁC ĐIỀU KIỆN CẤM/NGẬP
-    print("2. Áp dụng các điều kiện động (vùng cấm, ngập)...")
     G_dynamic, _ = weight_service.apply_dynamic_weights(
         G_base,
         request.blocking_geometries,
-        None  # Bỏ qua phần AI
+        None
     )
     return G_dynamic
 
-# HÀM FIND_STANDARD_ROUTE
 
 def find_standard_route(request: RouteRequest, G_base: nx.MultiDiGraph) -> dict:
-    """
-    Workflow tìm đường tiêu chuẩn hoàn chỉnh và được tối ưu hóa.
-    Đây là hàm chính được gọi bởi API endpoint.
-    """
-    print("\n--- BẮT ĐẦU QUY TRÌNH TÌM ĐƯỜNG TIÊU CHUẨN ---")
-
-    # ✅ THAY ĐỔI: Truyền G_base vào
     G_dynamic = _prepare_dynamic_subgraph(request, G_base)
     if G_dynamic is None:
-        return {"error": "Không thể chuẩn bị đồ thị cho việc tìm đường."}
+        return {"error": "không thể chuẩn bị đồ thị cho việc tìm đường."}
 
     start_point = request.start_point
     end_point = request.end_point
 
-    # BƯỚC 3: TÌM NODE GẦN NHẤT TRÊN ĐỒ THỊ (LAST MILE)
-    print("3. Tìm các node bắt đầu/kết thúc trên đồ thị...")
-    start_node_id = map_data_service.find_nearest_node(G_dynamic, start_point.lat, start_point.lon)
-    end_node_id = map_data_service.find_nearest_node(G_dynamic, end_point.lat, end_point.lon)
-    print(f"   -> Đi từ node {start_node_id} đến {end_node_id}.")
+    try:
+        start_node_id = map_data_service.find_nearest_node(G_dynamic, start_point.lat, start_point.lon)
+        end_node_id = map_data_service.find_nearest_node(G_dynamic, end_point.lat, end_point.lon)
+    except ValueError as e:
+        return {"error": str(e)}
 
-    # BƯỚC 4: CHẠY THUẬT TOÁN A* TRÊN ĐỒ THỊ
-    print("4. Chạy thuật toán A* để tìm đường tiêu chuẩn...")
+    if start_node_id == end_node_id:
+        return {"error": "hai điểm quá gần nhau, vui lòng chọn điểm xa hơn"}
+
     try:
         path_nodes = nx.astar_path(G_dynamic, source=start_node_id, target=end_node_id, weight='travel_time')
     except nx.NetworkXNoPath:
-        return {"error": "Không tìm thấy đường đi giữa hai điểm đã chọn."}
+        return {"error": "không tìm thấy đường đi giữa hai điểm đã chọn."}
     except Exception as e:
-        return {"error": f"Lỗi khi chạy A*: {e}"}
-    print("   -> Đã tìm thấy đường đi.")
+        return {"error": f"lỗi khi chạy a*: {e}"}
 
-    # BƯỚC 5: ĐỊNH DẠNG KẾT QUẢ TRẢ VỀ
-    print("5. Định dạng kết quả cuối cùng...")
     path_edges = ox.utils_graph.get_route_edge_attributes(G_dynamic, path_nodes)
     total_distance = sum(edge.get('length', 0) for edge in path_edges)
     total_duration_sec = sum(edge.get('travel_time', 0) for edge in path_edges)
-    path_gdf = ox.graph_to_gdfs(G_dynamic.subgraph(path_nodes), nodes=False)
-    path_geometry = path_gdf.unary_union
 
-    final_result = {
-        "message": "Standard route found successfully!",
+    geometries = []
+    for i in range(len(path_nodes) - 1):
+        u, v = path_nodes[i], path_nodes[i + 1]
+        edge_data = G_dynamic.get_edge_data(u, v)
+        if edge_data:
+            first_key = list(edge_data.keys())[0]
+            data = edge_data[first_key]
+            if 'geometry' in data and data['geometry'] is not None:
+                geometries.append(data['geometry'])
+            else:
+                u_node = G_dynamic.nodes[u]
+                v_node = G_dynamic.nodes[v]
+                geom = LineString([(u_node['x'], u_node['y']), (v_node['x'], v_node['y'])])
+                geometries.append(geom)
+
+    if not geometries:
+        return {"error": "không thể tạo geometry cho đường đi"}
+
+    try:
+        merged = linemerge(geometries)
+        path_geometry = merged if not merged.is_empty else MultiLineString(geometries)
+    except Exception:
+        path_geometry = MultiLineString(geometries)
+
+    return {
+        "message": "standard route found successfully",
         "distance": total_distance,
-        "duration": total_duration_sec / 60,  # Đổi sang phút
+        "duration": total_duration_sec / 60,
         "route": {
             "type": "Feature",
             "properties": {},
@@ -96,7 +91,3 @@ def find_standard_route(request: RouteRequest, G_base: nx.MultiDiGraph) -> dict:
         },
         "path": path_nodes
     }
-
-    print("--- KẾT THÚC QUY TRÌNH ---")
-    return final_result
-

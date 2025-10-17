@@ -1,8 +1,8 @@
 # src/app/api/path_finding.py
-from fastapi import APIRouter, HTTPException
-from typing import Optional
+from fastapi import APIRouter, HTTPException, Body
+from typing import Optional, List, Dict, Any
 import networkx as nx
-
+import time
 from src.services import geocoding_service, pathfinding_service
 from src.app.schemas.route_input_format import RouteRequest, Point
 
@@ -11,9 +11,7 @@ _flood_model = None
 
 
 def init_routes(G_base: nx.MultiDiGraph, flood_model):
-    """
-    Khởi tạo router với graph và model đã load từ main.py
-    """
+    """Khởi tạo router với graph và model đã load từ main.py"""
     global _G_base, _flood_model
     _G_base = G_base
     _flood_model = flood_model
@@ -25,9 +23,6 @@ router = APIRouter()
 
 @router.post("/find-route", summary="Tìm đường thông minh với model dự đoán ngập")
 def find_route_endpoint(request: RouteRequest):
-    """
-    ⚠️ CHƯA IMPLEMENT - Dành cho tương lai
-    """
     raise HTTPException(
         status_code=501,
         detail="Smart route với flood model chưa được implement. Vui lòng dùng /find-standard-route"
@@ -36,28 +31,28 @@ def find_route_endpoint(request: RouteRequest):
 
 @router.post("/find-standard-route", summary="Tìm đường tiêu chuẩn")
 def find_standard_route_endpoint(
-        start_address: str,
-        end_address: str,
-        blocking_geometries: list = None
+    start_address: Optional[str] = Body(...),
+    end_address: Optional[str] = Body(...),
+    blocking_geometries: List[Dict[str, Any]] = Body(default=[])
 ):
-    """
-    Tìm đường tiêu chuẩn từ địa chỉ A đến địa chỉ B.
-
-    Args:
-        start_address: Địa chỉ bắt đầu
-        end_address: Địa chỉ kết thúc
-        blocking_geometries: Danh sách vùng cấm (GeoJSON format)
-    """
+    """Tìm đường tiêu chuẩn từ địa chỉ A đến địa chỉ B."""
     try:
-        # 1. Kiểm tra graph đã load chưa
         if _G_base is None:
             raise HTTPException(status_code=500, detail="Graph chưa được load")
 
-        # 2. Geocode địa chỉ → tọa độ
+        if not start_address or not end_address:
+            raise HTTPException(status_code=400, detail="Thiếu địa chỉ đầu vào")
+
         start_coords = geocoding_service.get_coords_from_address(start_address)
+        time.sleep(1.5)
         end_coords = geocoding_service.get_coords_from_address(end_address)
 
-        # 3. Tạo RouteRequest object
+        if not start_coords or not end_coords:
+            raise HTTPException(
+                status_code=400,
+                detail="Không thể tìm thấy tọa độ cho địa chỉ đã nhập"
+            )
+
         route_request = RouteRequest(
             start_point=Point(
                 lat=start_coords["latitude"],
@@ -70,10 +65,8 @@ def find_standard_route_endpoint(
             blocking_geometries=blocking_geometries or []
         )
 
-        # 4. Gọi pathfinding service
         result = pathfinding_service.find_standard_route(route_request, _G_base)
 
-        # 5. Xử lý lỗi
         if "error" in result:
             raise HTTPException(status_code=404, detail=result["error"])
 
