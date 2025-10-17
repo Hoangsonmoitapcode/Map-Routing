@@ -10,11 +10,27 @@ print("=" * 70)
 print("NHẬP DỮ LIỆU BẢN ĐỒ VÀO CƠ SỞ DỮ LIỆU")
 print("=" * 70)
 
-# Tải toàn bộ khu vực Hà Nội (ít thay đổi, hiệu quả hơn cho phạm vi toàn TP)
-place_name = "Hà Nội, Việt Nam"
-print(f"Đang tải: {place_name}")
-G = ox.graph_from_place(place_name, network_type='all')
-print(f"   {len(G.nodes)} nút, {len(G.edges)} cạnh")
+# Danh sách khu vực cần tải dữ liệu
+places_names = [
+    "Phường Vĩnh Tuy, Hà Nội, Việt Nam",
+    "Phường Mai Động, Hà Nội, Việt Nam",
+    "Phường Vĩnh Hưng, Hà Nội, Việt Nam",
+    "Phường Thanh Lương, Hà Nội, Việt Nam"
+]
+
+# Tải từng khu vực và gộp thành một đồ thị chung
+graphs = []
+for place in places_names:
+    print(f"Đang tải: {place}")
+    G = ox.graph_from_place(place, network_type='all')
+    graphs.append(G)
+    print(f"   {len(G.nodes)} nút, {len(G.edges)} cạnh")
+
+# Hợp nhất các đồ thị khu vực lại
+G = graphs[0]
+for graph in graphs[1:]:
+    G = nx.compose(G, graph)
+print(f"\nSau khi gộp: {len(G.nodes)} nút, {len(G.edges)} cạnh")
 
 # Chuẩn hóa và hợp nhất các nút giao gần nhau
 G = ox.project_graph(G)
