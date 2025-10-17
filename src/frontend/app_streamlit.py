@@ -163,8 +163,8 @@ with col2:
     # Tab 2: Chọn đường theo địa chỉ
     with tab2:
         st.subheader("Cấm/ngập một đoạn đường")
-        road_name_ban = st.text_input("Tên đường, phố", key="ban_road_name", example="Đường Kim Ngưu/ Phố Lê Thanh Nghị")
-        from_address = st.text_input("Từ địa chỉ", key="ban_from_addr", example= "74/ Số 74")
+        road_name_ban = st.text_input("Tên đường, phố", key="ban_road_name")
+        from_address = st.text_input("Từ địa chỉ", key="ban_from_addr")
         to_address = st.text_input("Đến địa chỉ", key="ban_to_addr")
 
         if st.button("Xem trước & Lấy GeoJSON"):

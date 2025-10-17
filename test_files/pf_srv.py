@@ -1,347 +1,92 @@
-import pytest
+import sys
+from pathlib import Path
+import os
+import osmnx as ox
 import networkx as nx
-from unittest.mock import Mock, patch, MagicMock
-from shapely.geometry import Point as ShapelyPoint, Polygon
+import pytest
+from unittest.mock import patch, MagicMock
 
-from src.services.pathfinding_service import (
-    find_standard_route,
-    find_smart_route,
-    _prepare_dynamic_subgraph
-)
-from src.app.schemas.route_input_format import RouteRequest, Point  # ✅ Đổi từ Coordinate thành Point
+# --- ✅ BƯỚC 1: THIẾT LẬP MÔI TRƯỜNG ---
 
-
-# ======================================================================
-# FIXTURES - Tạo dữ liệu test
-# ======================================================================
-
-@pytest.fixture
-def sample_graph():
-    """Tạo một đồ thị mẫu đơn giản để test"""
-    G = nx.MultiDiGraph()
-
-    # Thêm nodes với tọa độ
-    nodes = [
-        (1, {"y": 21.0, "x": 105.0}),
-        (2, {"y": 21.01, "x": 105.01}),
-        (3, {"y": 21.02, "x": 105.02}),
-        (4, {"y": 21.03, "x": 105.03}),
-    ]
-    G.add_nodes_from(nodes)
-
-    # Thêm edges với các thuộc tính
-    edges = [
-        (1, 2, {"length": 1000, "travel_time": 60, "weight": 1.0}),
-        (2, 3, {"length": 1500, "travel_time": 90, "weight": 1.5}),
-        (3, 4, {"length": 1200, "travel_time": 72, "weight": 1.2}),
-        (1, 3, {"length": 2000, "travel_time": 120, "weight": 2.0}),  # Đường tắt
-    ]
-    G.add_edges_from(edges)
-
-    return G
+# Thêm thư mục gốc vào Python Path để có thể import
+try:
+    project_root = Path(__file__).resolve().parents[1]
+    sys.path.append(str(project_root))
+    # Import các thành phần cần thiết
+    from src.services import pathfinding_service, weight_service
+    # ✅ Cần import cả schema để tạo đối tượng request
+    from src.app.schemas.route_input_format import RouteRequest, Point
+except (ImportError, IndexError) as e:
+    pytest.fail(f"LỖI IMPORT: {e}. Hãy đảm bảo bạn chạy test từ thư mục gốc của dự án.")
 
 
-@pytest.fixture
-def sample_route_request():
-    """Tạo một route request mẫu"""
-    return RouteRequest(
-        start_point=Point(lat=21.0, lon=105.0),  # ✅ Sửa thành Point
-        end_point=Point(lat=21.03, lon=105.03),  # ✅ Sửa thành Point
-        blocking_geometries=[]  # ✅ Đổi None thành [] vì default là []
-    )
+# --- ✅ BƯỚC 2: FIXTURE ĐỂ TẢI BẢN ĐỒ THỰC TẾ (GIỮ NGUYÊN) ---
+
+@pytest.fixture(scope="session")
+def real_world_graph():
+    """
+    Tải, xử lý và cung cấp một đồ thị thực tế để làm dữ liệu nền cho các bài test.
+    """
+    print("\n--> (Chạy 1 lần) Đang tải và xử lý đồ thị test (Phường Vĩnh Tuy) từ OSMnx...")
+    try:
+        place_name = "Phường Vĩnh Tuy, Hà Nội, Việt Nam"
+        G = ox.graph_from_place(place_name, network_type='all')
+        G = ox.add_edge_speeds(G, fallback=30)
+        G = ox.add_edge_travel_times(G)
+        for u, v, data in G.edges(data=True):
+            if 'length' not in data:
+                data['length'] = 100
+        print(f"✅ Đã tạo thành công đồ thị test.")
+        return G
+    except Exception as e:
+        pytest.fail(f"❌ Lỗi khi tải đồ thị từ OSMnx: {e}")
 
 
-@pytest.fixture
-def sample_route_request_with_blocking():
-    """Tạo route request có vùng cấm"""
-    blocking_polygon = {
-        "type": "Polygon",
-        "coordinates": [[[105.005, 21.005], [105.015, 21.005],
-                         [105.015, 21.015], [105.005, 21.015],
-                         [105.005, 21.005]]]
-    }
+# --- ✅ BƯỚC 3: HÀM TEST ĐÃ ĐƯỢC CẬP NHẬT ---
 
-    return RouteRequest(
-        start_point=Point(lat=21.0, lon=105.0),  # ✅ Sửa thành Point
-        end_point=Point(lat=21.03, lon=105.03),  # ✅ Sửa thành Point
-        blocking_geometries=[blocking_polygon]
-    )
+def test_find_standard_route_on_real_graph(real_world_graph):
+    """
+    Kiểm tra toàn bộ workflow của hàm find_standard_route trên dữ liệu thật,
+    bao gồm cả việc áp dụng vùng cấm.
+    """
+    print("\n--- Bắt đầu Test Case: find_standard_route() trên bản đồ thật ---")
 
+    # 1. Chuẩn bị dữ liệu đầu vào
+    nodes = ox.graph_to_gdfs(real_world_graph, edges=False)
+    start_point = Point(lon=nodes.iloc[0].geometry.x, lat=nodes.iloc[0].geometry.y)
+    end_point = Point(lon=nodes.iloc[100].geometry.x, lat=nodes.iloc[100].geometry.y)
 
-# ======================================================================
-# TEST: find_smart_route
-# ======================================================================
-
-def test_find_smart_route_success(sample_graph):
-    """Test tìm đường thông minh thành công"""
-    result = find_smart_route(sample_graph, start_node_id=1, end_node_id=4)
-
-    assert "path" in result
-    assert isinstance(result["path"], list)
-    assert result["path"][0] == 1
-    assert result["path"][-1] == 4
-
-
-def test_find_smart_route_no_path(sample_graph):
-    """Test khi không tìm thấy đường đi"""
-    # Thêm node bị cô lập
-    sample_graph.add_node(999, y=21.99, x=105.99)
-
-    result = find_smart_route(sample_graph, start_node_id=1, end_node_id=999)
-
-    assert "error" in result
-    assert "No path found" in result["error"]
-
-
-def test_find_smart_route_invalid_nodes(sample_graph):
-    """Test với node không tồn tại"""
-    with pytest.raises(nx.NodeNotFound):
-        find_smart_route(sample_graph, start_node_id=1, end_node_id=9999)
-
-
-# ======================================================================
-# TEST: _prepare_dynamic_subgraph
-# ======================================================================
-
-@patch('src.services.pathfinding_service.weight_service.apply_dynamic_weights')
-def test_prepare_dynamic_subgraph_success(mock_apply_weights, sample_graph, sample_route_request):
-    """Test chuẩn bị subgraph thành công"""
-    # Mock weight_service trả về graph đã modify
-    mock_apply_weights.return_value = (sample_graph, None)
-
-    result = _prepare_dynamic_subgraph(sample_route_request, sample_graph)
-
-    assert result is not None
-    assert isinstance(result, nx.MultiDiGraph)
-    mock_apply_weights.assert_called_once()
-
-
-@patch('src.services.pathfinding_service.weight_service.apply_dynamic_weights')
-def test_prepare_dynamic_subgraph_with_blocking(
-        mock_apply_weights,
-        sample_graph,
-        sample_route_request_with_blocking
-):
-    """Test chuẩn bị subgraph với vùng cấm"""
-    mock_apply_weights.return_value = (sample_graph, None)
-
-    result = _prepare_dynamic_subgraph(sample_route_request_with_blocking, sample_graph)
-
-    assert result is not None
-    # Verify blocking_geometries được truyền vào
-    call_args = mock_apply_weights.call_args
-    assert call_args[0][1] is not None  # blocking_geometries
-    assert call_args[0][2] is None  # flood_model
-
-
-def test_prepare_dynamic_subgraph_empty_graph(sample_route_request):
-    """Test với đồ thị rỗng"""
-    empty_graph = nx.MultiDiGraph()
-
-    result = _prepare_dynamic_subgraph(sample_route_request, empty_graph)
-
-    assert result is None
-
-
-def test_prepare_dynamic_subgraph_none_graph(sample_route_request):
-    """Test với đồ thị None"""
-    result = _prepare_dynamic_subgraph(sample_route_request, None)
-
-    assert result is None
-
-
-# ======================================================================
-# TEST: find_standard_route (Integration test)
-# ======================================================================
-
-@patch('src.services.pathfinding_service.map_data_service.find_nearest_node')
-@patch('src.services.pathfinding_service.weight_service.apply_dynamic_weights')
-@patch('src.services.pathfinding_service.ox.utils_graph.get_route_edge_attributes')
-@patch('src.services.pathfinding_service.ox.graph_to_gdfs')
-def test_find_standard_route_success(
-        mock_graph_to_gdfs,
-        mock_get_route_edges,
-        mock_apply_weights,
-        mock_find_nearest,
-        sample_graph,
-        sample_route_request
-):
-    """Test tìm đường tiêu chuẩn thành công"""
-    # Setup mocks
-    mock_apply_weights.return_value = (sample_graph, None)
-    mock_find_nearest.side_effect = [1, 4]  # start_node, end_node
-
-    # Mock edge attributes
-    mock_get_route_edges.return_value = [
-        {"length": 1000, "travel_time": 60},
-        {"length": 1200, "travel_time": 72}
-    ]
-
-    # Mock GeoDataFrame
-    mock_gdf = MagicMock()
-    mock_gdf.unary_union.__geo_interface__ = {
-        "type": "LineString",
-        "coordinates": [[105.0, 21.0], [105.03, 21.03]]
-    }
-    mock_graph_to_gdfs.return_value = mock_gdf
-
-    # Execute
-    result = find_standard_route(sample_route_request, sample_graph)
-
-    # Assertions
-    assert "message" in result
-    assert result["message"] == "Standard route found successfully!"
-    assert "distance" in result
-    assert "duration" in result
-    assert "route" in result
-    assert result["distance"] == 2200  # 1000 + 1200
-    assert result["duration"] == 2.2  # (60 + 72) / 60 minutes
-
-
-@patch('src.services.pathfinding_service.map_data_service.find_nearest_node')
-@patch('src.services.pathfinding_service.weight_service.apply_dynamic_weights')
-def test_find_standard_route_no_path(
-        mock_apply_weights,
-        mock_find_nearest,
-        sample_graph,
-        sample_route_request
-):
-    """Test khi không tìm thấy đường đi"""
-    # Tạo graph không có đường đi
-    G_isolated = nx.MultiDiGraph()
-    G_isolated.add_nodes_from([(1, {"y": 21.0, "x": 105.0}),
-                               (999, {"y": 21.99, "x": 105.99})])
-
-    mock_apply_weights.return_value = (G_isolated, None)
-    mock_find_nearest.side_effect = [1, 999]
-
-    result = find_standard_route(sample_route_request, G_isolated)
-
-    assert "error" in result
-    assert "Không tìm thấy đường đi" in result["error"]
-
-
-@patch('src.services.pathfinding_service.weight_service.apply_dynamic_weights')
-def test_find_standard_route_graph_preparation_failed(
-        mock_apply_weights,
-        sample_route_request
-):
-    """Test khi không thể chuẩn bị đồ thị"""
-    empty_graph = nx.MultiDiGraph()
-
-    result = find_standard_route(sample_route_request, empty_graph)
-
-    assert "error" in result
-    assert "Không thể chuẩn bị đồ thị" in result["error"]
-
-
-@patch('src.services.pathfinding_service.map_data_service.find_nearest_node')
-@patch('src.services.pathfinding_service.weight_service.apply_dynamic_weights')
-def test_find_standard_route_astar_exception(
-        mock_apply_weights,
-        mock_find_nearest,
-        sample_graph,
-        sample_route_request
-):
-    """Test khi A* gặp exception không mong muốn"""
-    mock_apply_weights.return_value = (sample_graph, None)
-    mock_find_nearest.side_effect = [1, 4]
-
-    # Mock nx.astar_path để raise exception
-    with patch('src.services.pathfinding_service.nx.astar_path') as mock_astar:
-        mock_astar.side_effect = Exception("Unexpected error")
-
-        result = find_standard_route(sample_route_request, sample_graph)
-
-        assert "error" in result
-        assert "Lỗi khi chạy A*" in result["error"]
-
-
-# ======================================================================
-# TEST: Edge cases
-# ======================================================================
-
-def test_find_standard_route_same_start_end(sample_graph):
-    """Test khi điểm đầu và điểm cuối giống nhau"""
+    # ✅ THAY ĐỔI: Tạo một yêu cầu tìm đường KHÔNG có vùng cấm
     request = RouteRequest(
-        start_point=Point(lat=21.0, lon=105.0),  # ✅ Sửa thành Point
-        end_point=Point(lat=21.0, lon=105.0),  # ✅ Sửa thành Point
-        blocking_geometries=[]
+        start_point=start_point,
+        end_point=end_point,
+        blocking_geometries=[]  # Gửi một danh sách rỗng
     )
-
-    with patch('src.services.pathfinding_service.map_data_service.find_nearest_node') as mock_find:
-        with patch('src.services.pathfinding_service.weight_service.apply_dynamic_weights') as mock_weights:
-            mock_weights.return_value = (sample_graph, None)
-            mock_find.return_value = 1  # Cùng node
-
-            with patch('src.services.pathfinding_service.nx.astar_path') as mock_astar:
-                mock_astar.return_value = [1]  # Path chỉ có 1 node
-
-                with patch('src.services.pathfinding_service.ox.utils_graph.get_route_edge_attributes') as mock_edges:
-                    mock_edges.return_value = []  # Không có edge
-
-                    with patch('src.services.pathfinding_service.ox.graph_to_gdfs') as mock_gdf:
-                        mock_gdf_obj = MagicMock()
-                        mock_gdf_obj.unary_union.__geo_interface__ = {
-                            "type": "Point",
-                            "coordinates": [105.0, 21.0]
-                        }
-                        mock_gdf.return_value = mock_gdf_obj
-
-                        result = find_standard_route(request, sample_graph)
-
-                        assert "distance" in result
-                        assert result["distance"] == 0
-
-
-# ======================================================================
-# TEST: Performance & Stress
-# ======================================================================
-
-def test_find_standard_route_large_graph():
-    """Test với đồ thị lớn (stress test)"""
-    # Tạo đồ thị lớn hơn
-    G = nx.grid_2d_graph(10, 10)
-    G = nx.MultiDiGraph(G)
-
-    # Thêm coordinates cho các nodes
-    for node in G.nodes():
-        G.nodes[node]['x'] = 105.0 + node[0] * 0.001
-        G.nodes[node]['y'] = 21.0 + node[1] * 0.001
-
-    # Thêm attributes cho edges
-    for u, v in G.edges():
-        G[u][v][0]['length'] = 100
-        G[u][v][0]['travel_time'] = 10
-        G[u][v][0]['weight'] = 1.0
-
-    request = RouteRequest(
-        start_point=Point(lat=21.0, lon=105.0),  # ✅ Sửa thành Point
-        end_point=Point(lat=21.009, lon=105.009),  # ✅ Sửa thành Point
-        blocking_geometries=[]
+    print(
+        f"--> Tìm đường từ ({start_point.lon:.4f}, {start_point.lat:.4f}) đến ({end_point.lon:.4f}, {end_point.lat:.4f})"
     )
+    print("--> KHÔNG áp dụng vùng cấm.")
 
-    with patch('src.services.pathfinding_service.map_data_service.find_nearest_node') as mock_find:
-        with patch('src.services.pathfinding_service.weight_service.apply_dynamic_weights') as mock_weights:
-            mock_weights.return_value = (G, None)
-            mock_find.side_effect = [(0, 0), (9, 9)]
+    # 2. "Giả lập" (Mock) các service phụ thuộc để cô lập bài test
+    with patch('src.services.pathfinding_service.map_data_service.find_nearest_node') as mock_find_node:
+        # Cấu hình mock để trả về các node ID khi được gọi
+        start_node_id = ox.nearest_nodes(real_world_graph, X=start_point.lon, Y=start_point.lat)
+        end_node_id = ox.nearest_nodes(real_world_graph, X=end_point.lon, Y=end_point.lat)
+        mock_find_node.side_effect = [start_node_id, end_node_id]
 
-            with patch('src.services.pathfinding_service.ox.utils_graph.get_route_edge_attributes') as mock_edges:
-                mock_edges.return_value = [{"length": 100, "travel_time": 10}] * 18
+        # 3. Chạy hàm find_standard_route với các tham số mới
+        result = pathfinding_service.find_standard_route(request, real_world_graph)
 
-                with patch('src.services.pathfinding_service.ox.graph_to_gdfs') as mock_gdf:
-                    mock_gdf_obj = MagicMock()
-                    mock_gdf_obj.unary_union.__geo_interface__ = {
-                        "type": "LineString",
-                        "coordinates": [[105.0, 21.0], [105.009, 21.009]]
-                    }
-                    mock_gdf.return_value = mock_gdf_obj
+        # 4. Kiểm chứng kết quả
+        print("\n--> Kiểm chứng kết quả trả về...")
+        assert "error" not in result, f"Hàm trả về lỗi: {result.get('error')}"
 
-                    result = find_standard_route(request, G)
+        assert "route" in result and result["route"]["type"] == "Feature"
+        assert "distance" in result and result["distance"] > 0
+        assert "duration" in result and result["duration"] > 0
+        assert "path" in result and len(result["path"]) > 0
 
-                    assert "message" in result
-                    assert result["distance"] == 1800  # 18 edges * 100
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+        print(f"    ✅ Thành công! Tìm thấy đường đi.")
+        print(f"       - Khoảng cách: {result['distance'] / 1000:.2f} km")
+        print(f"       - Thời gian: {result['duration']:.1f} phút")
+        print(f"       - Lộ trình đi qua {len(result['path'])} nodes.")

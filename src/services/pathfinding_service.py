@@ -93,7 +93,8 @@ def find_standard_route(request: RouteRequest, G_base: nx.MultiDiGraph) -> dict:
             "type": "Feature",
             "properties": {},
             "geometry": path_geometry.__geo_interface__
-        }
+        },
+        "path": path_nodes
     }
 
     print("--- KẾT THÚC QUY TRÌNH ---")
