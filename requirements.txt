@@ -19,3 +19,4 @@ streamlit-folium
 shapely
 geopy
 httpx>=0.23.0
+python-multipart
