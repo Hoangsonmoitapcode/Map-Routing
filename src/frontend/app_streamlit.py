@@ -23,6 +23,9 @@ if 'blocking_geometries' not in st.session_state:
 if 'custom_graph' not in st.session_state:
     st.session_state['custom_graph'] = None
 
+if 'current_route' not in st.session_state:
+    st.session_state['current_route'] = None
+
 
 def load_or_create_graph():
     """Load graph từ file hoặc tạo mới nếu chưa có"""
@@ -140,6 +143,52 @@ with col1:
         for geom in st.session_state['blocking_geometries']:
             folium.GeoJson(geom, style_function=lambda x: {'color': 'red', 'weight': 3, 'fillOpacity': 0.3}).add_to(m)
 
+    # Vẽ route hiện tại nếu có
+    if st.session_state['current_route']:
+        route_data = st.session_state['current_route']
+        
+        # Vẽ đường đi
+        route_layer = folium.GeoJson(
+            route_data['route'],
+            style_function=lambda x: {
+                'color': 'green',
+                'weight': 6,
+                'opacity': 0.9
+            }
+        )
+        route_layer.add_to(m)
+        
+        # Thêm marker điểm đầu/cuối với thông tin chi tiết
+        coords = route_data['route']['geometry']['coordinates']
+        
+        # Marker điểm bắt đầu
+        folium.Marker(
+            [coords[0][1], coords[0][0]],
+            popup=f"""
+            <div style="font-family: Arial; font-size: 14px;">
+                <h4 style="color: #1f77b4; margin: 0;">🚀 Điểm bắt đầu</h4>
+                <p style="margin: 5px 0;"><strong>Khoảng cách:</strong> {route_data['distance']/1000:.2f} km</p>
+                <p style="margin: 5px 0;"><strong>Thời gian:</strong> {route_data['duration']:.0f} phút</p>
+            </div>
+            """,
+            tooltip="Điểm bắt đầu",
+            icon=folium.Icon(color='blue', icon='play', prefix='fa')
+        ).add_to(m)
+        
+        # Marker điểm đến
+        folium.Marker(
+            [coords[-1][1], coords[-1][0]],
+            popup=f"""
+            <div style="font-family: Arial; font-size: 14px;">
+                <h4 style="color: #d62728; margin: 0;">🏁 Điểm đến</h4>
+                <p style="margin: 5px 0;"><strong>Khoảng cách:</strong> {route_data['distance']/1000:.2f} km</p>
+                <p style="margin: 5px 0;"><strong>Thời gian:</strong> {route_data['duration']:.0f} phút</p>
+            </div>
+            """,
+            tooltip="Điểm đến",
+            icon=folium.Icon(color='red', icon='stop', prefix='fa')
+        ).add_to(m)
+
     # 3. Hiển thị bản đồ trong Streamlit
     output = st_folium(m, width=800, height=600)
 
@@ -200,32 +249,57 @@ with col2:
         oneway_to = st.text_input("Đến địa chỉ", key="oneway_to_addr")
 
 # --- Sidebar để hiển thị trạng thái ---
-st.sidebar.header("Các vùng/đường cấm đã chọn")
+st.sidebar.header("📊 Thông tin tuyến đường")
+if st.session_state['current_route']:
+    route_data = st.session_state['current_route']
+    st.sidebar.success("✅ Đã tìm thấy tuyến đường!")
+    
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        st.metric("Khoảng cách", f"{route_data['distance'] / 1000:.2f} km")
+    with col2:
+        st.metric("Thời gian", f"{route_data['duration']:.0f} phút")
+    
+    if st.sidebar.button("🗑️ Xóa tuyến đường", type="secondary"):
+        st.session_state['current_route'] = None
+        st.rerun()
+else:
+    st.sidebar.info("Chưa có tuyến đường nào được tìm.")
+
+st.sidebar.divider()
+st.sidebar.header("🚫 Các vùng/đường cấm đã chọn")
 if st.session_state['blocking_geometries']:
     st.sidebar.success(f"Đang áp dụng {len(st.session_state['blocking_geometries'])} điều kiện.")
     st.sidebar.json(st.session_state['blocking_geometries'])
-    if st.sidebar.button("Xóa tất cả"):
+    if st.sidebar.button("Xóa tất cả vùng cấm"):
         st.session_state['blocking_geometries'] = []
         st.rerun()
 else:
-    st.sidebar.info("Chưa có lựa chọn nào.")
+    st.sidebar.info("Chưa có vùng cấm nào.")
 
 # Phần tìm đường ở cuối trang
 st.divider()
-st.header("🚗 Tìm đường thông minh")
+if st.session_state['current_route']:
+    st.header("🚗 Tìm đường mới")
+    st.info("💡 Để tìm tuyến đường mới, nhập địa chỉ bên dưới và nhấn 'Tìm đường'")
+else:
+    st.header("🚗 Tìm đường thông minh")
+    st.info("📍 Nhập địa chỉ điểm bắt đầu và điểm đến để tìm tuyến đường tối ưu")
 
 col1, col2 = st.columns(2)
 
 with col1:
     start_address = st.text_input(
         "🔵 Điểm bắt đầu",
-        placeholder="VD: 119 Lê Thanh Nghị, Hà Nội"
+        placeholder="VD: 119 Lê Thanh Nghị, Hà Nội",
+        help="Nhập địa chỉ điểm xuất phát"
     )
 
 with col2:
     end_address = st.text_input(
         "🔴 Điểm đến",
-        placeholder="VD: Cầu Vĩnh Tuy, Hà Nội"
+        placeholder="VD: Cầu Vĩnh Tuy, Hà Nội",
+        help="Nhập địa chỉ điểm đích"
     )
 
 if st.button("🔍 Tìm đường", type="primary"):
@@ -243,48 +317,19 @@ if st.button("🔍 Tìm đường", type="primary"):
             }
 
             response = requests.post(
-                "http://127.0.0.1:8000/api/v1/routing/find-route",
+                "http://127.0.0.1:8000/api/v1/routing/find-standard-route",
                 json=payload,
                 timeout=30
             )
             response.raise_for_status()
             result = response.json()
 
+            # LƯU ROUTE VÀO SESSION STATE
+            st.session_state['current_route'] = result
+            
             # HIỂN THỊ KẾT QUẢ
             st.success("✅ Tìm thấy đường đi!")
-
-            col_metric1, col_metric2 = st.columns(2)
-            with col_metric1:
-                st.metric("Khoảng cách", f"{result['distance'] / 1000:.2f} km")
-            with col_metric2:
-                st.metric("Thời gian", f"{result['duration']:.0f} phút")
-
-            # VẼ ĐƯỜNG LÊN BẢN ĐỒ
-            route_layer = folium.GeoJson(
-                result['route'],
-                style_function=lambda x: {
-                    'color': 'green',
-                    'weight': 5,
-                    'opacity': 0.8
-                }
-            )
-            route_layer.add_to(m)
-
-            # Thêm marker điểm đầu/cuối
-            coords = result['route']['geometry']['coordinates']
-            folium.Marker(
-                [coords[0][1], coords[0][0]],
-                popup="Điểm bắt đầu",
-                icon=folium.Icon(color='blue', icon='play')
-            ).add_to(m)
-
-            folium.Marker(
-                [coords[-1][1], coords[-1][0]],
-                popup="Điểm đến",
-                icon=folium.Icon(color='red', icon='stop')
-            ).add_to(m)
-
-            st.rerun()  # Cập nhật bản đồ
+            st.rerun()  # Cập nhật bản đồ để hiển thị route
 
         except Exception as e:
             st.error(f"❌ Lỗi: {e}")
