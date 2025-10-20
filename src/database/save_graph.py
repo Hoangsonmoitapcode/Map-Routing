@@ -15,7 +15,12 @@ places_names = [
     "Phường Vĩnh Tuy, Hà Nội, Việt Nam",
     "Phường Mai Động, Hà Nội, Việt Nam",
     "Phường Vĩnh Hưng, Hà Nội, Việt Nam",
-    "Phường Thanh Lương, Hà Nội, Việt Nam"
+    "Phường Thanh Lương, Hà Nội, Việt Nam",
+    "Phường Tương Mai, Hà Nội, Việt Nam",
+    "Phường Bạch Mai, Hà Nội, Việt Nam",
+    "Phường Hai Bà Trưng, Hà Nội, Việt Nam",
+    "Phường Hoàng Mai, Hà Nội, Việt Nam",
+    "Phường Lĩnh Nam, Hà Nội, Việt Nam"
 ]
 
 # Tải từng khu vực và gộp thành một đồ thị chung

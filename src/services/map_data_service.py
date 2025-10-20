@@ -89,7 +89,7 @@ def find_nearest_node(G: nx.MultiDiGraph, lat: float, lon: float) -> int:
 
     distance_km = geodesic((lat, lon), (node_lat, node_lon)).kilometers
 
-    if distance_km > 2.0:
+    if distance_km > 4.0:
         raise ValueError(
             f"Địa chỉ nằm ngoài phạm vi cho phép (cách {distance_km:.1f} km). "
             f"Vui lòng chọn địa chỉ trong khu vực được hỗ trợ."

@@ -9,7 +9,7 @@ from src.app.schemas.route_input_format import RouteRequest, Point
 _G_base: Optional[nx.MultiDiGraph] = None
 _flood_model = None
 
-# ✅ Định nghĩa router TRƯỚC khi sử dụng
+
 router = APIRouter()
 
 
@@ -33,7 +33,9 @@ def find_route_endpoint(request: RouteRequest):
 def find_standard_route_endpoint(
     start_address: Optional[str] = Body(...),
     end_address: Optional[str] = Body(...),
-    blocking_geometries: List[Dict[str, Any]] = Body(default=[])
+    blocking_geometries: List[Dict[str, Any]] = Body(default=[]),
+    flood_areas: List[Dict[str, Any]] = Body(default=[]),
+    ban_areas: List[Dict[str, Any]] = Body(default=[])
 ):
     """Tìm đường tiêu chuẩn từ địa chỉ A đến địa chỉ B."""
     try:
@@ -47,10 +49,16 @@ def find_standard_route_endpoint(
         time.sleep(1.5)
         end_coords = geocoding_service.get_coords_from_address(end_address)
 
-        if not start_coords or not end_coords:
+        if not start_coords:
             raise HTTPException(
                 status_code=400,
-                detail="Không thể tìm thấy tọa độ cho địa chỉ đã nhập"
+                detail="Điểm bắt đầu có thể nằm trong vùng cấm hoặc ngoài bản đồ"
+            )
+        
+        if not end_coords:
+            raise HTTPException(
+                status_code=400,
+                detail="Điểm đến có thể nằm trong vùng cấm hoặc ngoài bản đồ"
             )
 
         # Log blocking geometries để debug
@@ -68,13 +76,15 @@ def find_standard_route_endpoint(
                 lat=end_coords["latitude"],
                 lon=end_coords["longitude"]
             ),
-            blocking_geometries=blocking_geometries or []
+            blocking_geometries=blocking_geometries or [],
+            flood_areas=flood_areas or [],
+            ban_areas=ban_areas or []
         )
 
         result = pathfinding_service.find_standard_route(route_request, _G_base)
 
         if "error" in result:
-            raise HTTPException(status_code=404, detail=result["error"])
+            return {"error": result["error"], "message": "Không tìm thấy đường đi"}
 
         return result
 

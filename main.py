@@ -28,22 +28,10 @@ async def lifespan(app: FastAPI):
     else:
         print("running without flood prediction model. smart routing disabled.")
 
-    # ✅ initialize pathfinding router
+    # Register routers after data is loaded
     pathfinding_router = init_pathfinding_routes(G_base, flood_model)
-
-    # ✅ đăng ký pathfinding router
-    app.include_router(
-        pathfinding_router,
-        prefix="/api/v1/routing",
-        tags=["routing"]
-    )
-
-    # ✅ đăng ký geocoding router
-    app.include_router(
-        geocoding_router,
-        prefix="/api/v1/geocoding",
-        tags=["geocoding"]
-    )
+    app.include_router(pathfinding_router, prefix="/api/v1/routing", tags=["routing"])
+    app.include_router(geocoding_router, prefix="/api/v1/geocoding", tags=["geocoding"])
 
     print("api ready!")
 
