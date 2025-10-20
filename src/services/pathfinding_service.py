@@ -20,10 +20,25 @@ def _prepare_dynamic_subgraph(request: RouteRequest, G_base: nx.MultiDiGraph) ->
     if not G_base or not G_base.nodes:
         return None
 
+    # Extract flood and ban areas from blocking_geometries based on type
+    flood_areas = []
+    ban_areas = []
+    
+    if hasattr(request, 'flood_areas') and request.flood_areas:
+        flood_areas = request.flood_areas
+    if hasattr(request, 'ban_areas') and request.ban_areas:
+        ban_areas = request.ban_areas
+    
+    # Legacy support: treat blocking_geometries as ban areas
+    if request.blocking_geometries:
+        ban_areas.extend(request.blocking_geometries)
+
     G_dynamic, _ = weight_service.apply_dynamic_weights(
         G_base,
         request.blocking_geometries,
-        None
+        None,
+        flood_areas,
+        ban_areas
     )
     return G_dynamic
 
@@ -46,7 +61,7 @@ def find_standard_route(request: RouteRequest, G_base: nx.MultiDiGraph) -> dict:
         return {"error": "hai điểm quá gần nhau, vui lòng chọn điểm xa hơn"}
 
     try:
-        path_nodes = nx.astar_path(G_dynamic, source=start_node_id, target=end_node_id, weight='travel_time')
+        path_nodes = nx.astar_path(G_dynamic, source=start_node_id, target=end_node_id, weight='weight')
     except nx.NetworkXNoPath:
         return {"error": "không tìm thấy đường đi giữa hai điểm đã chọn."}
     except Exception as e:
@@ -54,7 +69,8 @@ def find_standard_route(request: RouteRequest, G_base: nx.MultiDiGraph) -> dict:
 
     path_edges = ox.utils_graph.get_route_edge_attributes(G_dynamic, path_nodes)
     total_distance = sum(edge.get('length', 0) for edge in path_edges)
-    total_duration_sec = sum(edge.get('travel_time', 0) for edge in path_edges)
+    # Use weight for duration calculation (weight represents travel time in seconds)
+    total_duration_sec = sum(edge.get('weight', edge.get('travel_time', 0)) for edge in path_edges)
 
     geometries = []
     for i in range(len(path_nodes) - 1):

@@ -18,6 +18,15 @@ GRAPH_FILE = Path("src/models/graph/vinhtuy.graphml")
 if 'blocking_geometries' not in st.session_state:
     st.session_state['blocking_geometries'] = []
 
+if 'flood_areas' not in st.session_state:
+    st.session_state['flood_areas'] = []
+
+if 'ban_areas' not in st.session_state:
+    st.session_state['ban_areas'] = []
+
+if 'oneway_areas' not in st.session_state:
+    st.session_state['oneway_areas'] = []
+
 if 'custom_graph' not in st.session_state:
     st.session_state['custom_graph'] = None
 
@@ -135,10 +144,33 @@ with col1:
     # Thêm plugin Draw vào bản đồ
     Draw(export=True).add_to(m)
 
-    # Vẽ lại các vùng/đường cấm đã được lưu trong session state
+    # Vẽ lại các vùng ngập (màu xanh dương)
+    if st.session_state['flood_areas']:
+        for geom in st.session_state['flood_areas']:
+            folium.GeoJson(geom, style_function=lambda x: {'color': 'blue', 'weight': 3, 'fillOpacity': 0.3}).add_to(m)
+    
+    # Vẽ lại các vùng cấm (màu đỏ)
+    if st.session_state['ban_areas']:
+        for geom in st.session_state['ban_areas']:
+            folium.GeoJson(geom, style_function=lambda x: {'color': 'red', 'weight': 3, 'fillOpacity': 0.3}).add_to(m)
+    
+    # Vẽ lại các vùng cấm legacy (màu đỏ)
     if st.session_state['blocking_geometries']:
         for geom in st.session_state['blocking_geometries']:
             folium.GeoJson(geom, style_function=lambda x: {'color': 'red', 'weight': 3, 'fillOpacity': 0.3}).add_to(m)
+    
+    # Vẽ lại các đường một chiều (màu tím)
+    if st.session_state['oneway_areas']:
+        for geom in st.session_state['oneway_areas']:
+            folium.GeoJson(geom, style_function=lambda x: {'color': 'purple', 'weight': 3, 'opacity': 0.8}).add_to(m)
+    
+    # Vẽ preview segment (màu cam)
+    if 'preview_segment' in st.session_state and st.session_state['preview_segment']:
+        preview_color = 'orange'  # Orange for preview
+        folium.GeoJson(
+            st.session_state['preview_segment'], 
+            style_function=lambda x: {'color': preview_color, 'weight': 4, 'opacity': 0.8}
+        ).add_to(m)
 
     # Vẽ route hiện tại nếu có
     if st.session_state['current_route']:
@@ -163,7 +195,7 @@ with col1:
             [coords[0][1], coords[0][0]],
             popup=f"""
             <div style="font-family: Arial; font-size: 14px;">
-                <h4 style="color: #1f77b4; margin: 0;">🚀 Điểm bắt đầu</h4>
+                <h4 style="color: #1f77b4; margin: 0;"> Điểm bắt đầu</h4>
                 <p style="margin: 5px 0;"><strong>Khoảng cách:</strong> {route_data['distance']/1000:.2f} km</p>
                 <p style="margin: 5px 0;"><strong>Thời gian:</strong> {route_data['duration']:.0f} phút</p>
             </div>
@@ -191,24 +223,41 @@ with col1:
 
 with col2:
     st.header("Bảng điều khiển")
-    tab1, tab2 = st.tabs(["Vẽ vùng cấm/ngập", "Chọn đường theo địa chỉ"])
+    tab1, tab2, tab3 = st.tabs(["Vẽ vùng ngập", "Vẽ vùng cấm", "Chọn đường theo địa chỉ"])
 
-    # Tab 1: Vẽ vùng cấm thủ công
+    # Tab 1: Vẽ vùng ngập (tăng gấp đôi trọng số)
     with tab1:
-        st.info("Sử dụng các công cụ bên trái bản đồ để vẽ một đa giác.")
+        st.info("Vẽ vùng ngập")
         if output.get("all_drawings") and len(output["all_drawings"]) > 0:
             # Lấy hình mới nhất được vẽ
             last_drawn = output["all_drawings"][-1]
             st.write("Hình vừa vẽ:")
             st.json(last_drawn['geometry'])
-            if st.button("Thêm vùng cấm này"):
-                st.session_state['blocking_geometries'].append(last_drawn['geometry'])
+            if st.button("Thêm vùng ngập này", key="add_flood"):
+                st.session_state['flood_areas'].append(last_drawn['geometry'])
+                st.success("Đã thêm vùng ngập. Bản đồ sẽ được cập nhật.")
+                st.rerun()
+
+    # Tab 2: Vẽ vùng cấm (chặn hoàn toàn)
+    with tab2:
+        st.info("Vẽ vùng cấm")
+        if output.get("all_drawings") and len(output["all_drawings"]) > 0:
+            # Lấy hình mới nhất được vẽ
+            last_drawn = output["all_drawings"][-1]
+            st.write("Hình vừa vẽ:")
+            st.json(last_drawn['geometry'])
+            if st.button("Thêm vùng cấm này", key="add_ban"):
+                st.session_state['ban_areas'].append(last_drawn['geometry'])
                 st.success("Đã thêm vùng cấm. Bản đồ sẽ được cập nhật.")
                 st.rerun()
 
-    # Tab 2: Chọn đường theo địa chỉ
-    with tab2:
+    # Tab 3: Chọn đường theo địa chỉ
+    with tab3:
         st.subheader("Cấm/ngập một đoạn đường")
+        
+        # Radio button để chọn loại
+        area_type = st.radio("Chọn loại vùng:", ["Vùng ngập (tăng trọng số)", "Vùng cấm (chặn hoàn toàn)", "Đường một chiều"], key="area_type")
+        
         road_name_ban = st.text_input("Tên đường, phố", key="ban_road_name")
         from_address = st.text_input("Từ địa chỉ", key="ban_from_addr")
         to_address = st.text_input("Đến địa chỉ", key="ban_to_addr")
@@ -246,10 +295,11 @@ with col2:
 
                     st.write("GeoJSON của đoạn đường:")
                     st.json(segment_geojson)
-                    if st.button("Thêm đoạn đường cấm này"):
-                        st.session_state['blocking_geometries'].append(segment_geojson)
-                        st.success("Đã thêm. Bản đồ sẽ được cập nhật.")
-                        st.rerun()
+                    
+                    # Store preview segment in session state
+                    st.session_state['preview_segment'] = segment_geojson
+                    st.session_state['preview_type'] = area_type
+                    st.rerun()
 
                 except requests.exceptions.HTTPError as e:
                     st.error(f"Lỗi HTTP: {e}")
@@ -260,12 +310,36 @@ with col2:
             else:
                 st.warning("Vui lòng nhập đủ thông tin.")
 
+        # Add confirmation buttons that persist
+        if 'preview_segment' in st.session_state and st.session_state['preview_segment']:
+            st.write("---")
+            st.write("**Xác nhận thêm đoạn đường:**")
+            if st.session_state.get('preview_type') == "Vùng ngập (tăng trọng số)":
+                if st.button("Thêm đoạn đường này", key="confirm_flood"):
+                    st.session_state['flood_areas'].append(st.session_state['preview_segment'])
+                    st.success("Đã thêm vùng ngập. Bản đồ sẽ được cập nhật.")
+                    # Clear preview
+                    del st.session_state['preview_segment']
+                    del st.session_state['preview_type']
+                    st.rerun()
+            elif st.session_state.get('preview_type') == "Vùng cấm (chặn hoàn toàn)":
+                if st.button("Thêm đoạn đường này", key="confirm_ban"):
+                    st.session_state['ban_areas'].append(st.session_state['preview_segment'])
+                    st.success("Đã thêm vùng cấm. Bản đồ sẽ được cập nhật.")
+                    # Clear preview
+                    del st.session_state['preview_segment']
+                    del st.session_state['preview_type']
+                    st.rerun()
+            else:  # One-way road
+                if st.button("Thêm đoạn đường này", key="confirm_oneway"):
+                    st.session_state['oneway_areas'].append(st.session_state['preview_segment'])
+                    st.success("Đã thêm đường một chiều. Bản đồ sẽ được cập nhật.")
+                    # Clear preview
+                    del st.session_state['preview_segment']
+                    del st.session_state['preview_type']
+                    st.rerun()
+
         st.divider()
-        st.subheader("Thiết lập đường một chiều")
-        st.write("(Tính năng đang phát triển)")
-        oneway_road = st.text_input("Tên đường", key="oneway_road_name")
-        oneway_from = st.text_input("Một chiều từ địa chỉ", key="oneway_from_addr")
-        oneway_to = st.text_input("Đến địa chỉ", key="oneway_to_addr")
 
 # --- Sidebar để hiển thị trạng thái ---
 st.sidebar.header("Thông tin tuyến đường")
@@ -286,21 +360,71 @@ else:
     st.sidebar.info("Chưa có tuyến đường nào được tìm.")
 
 st.sidebar.divider()
-st.sidebar.header("Các vùng/đường cấm đã chọn")
-if st.session_state['blocking_geometries']:
-    st.sidebar.success(f"Đang áp dụng {len(st.session_state['blocking_geometries'])} điều kiện.")
-    st.sidebar.json(st.session_state['blocking_geometries'])
-    if st.sidebar.button("Xóa tất cả vùng cấm"):
-        st.session_state['blocking_geometries'] = []
+st.sidebar.header("Các vùng đã chọn")
+
+# Vùng ngập
+if st.session_state['flood_areas']:
+    st.sidebar.success(f" {len(st.session_state['flood_areas'])} vùng ngập")
+    for i, area in enumerate(st.session_state['flood_areas']):
+        col1, col2 = st.sidebar.columns([3, 1])
+        with col1:
+            st.sidebar.write(f" Vùng ngập #{i+1}")
+        with col2:
+            if st.sidebar.button("❌", key=f"del_flood_{i}"):
+                st.session_state['flood_areas'].pop(i)
+                st.rerun()
+    if st.sidebar.button("Xóa tất cả vùng ngập"):
+        st.session_state['flood_areas'] = []
         st.rerun()
 else:
-    st.sidebar.info("Chưa có vùng cấm nào.")
+    st.sidebar.info("Chưa có vùng ngập nào.")
+
+# Vùng cấm
+if st.session_state['ban_areas']:
+    st.sidebar.success(f" {len(st.session_state['ban_areas'])} vùng cấm")
+    for i, area in enumerate(st.session_state['ban_areas']):
+        col1, col2 = st.sidebar.columns([3, 1])
+        with col1:
+            st.sidebar.write(f" Vùng cấm #{i+1}")
+        with col2:
+            if st.sidebar.button("❌", key=f"del_ban_{i}"):
+                st.session_state['ban_areas'].pop(i)
+                st.rerun()
+    if st.sidebar.button("Xóa tất cả vùng cấm"):
+        st.session_state['ban_areas'] = []
+        st.rerun()
+else:
+    st.sidebar.info(" Chưa có vùng cấm nào.")
+
+# Đường một chiều
+if st.session_state['oneway_areas']:
+    st.sidebar.success(f" {len(st.session_state['oneway_areas'])} đường một chiều")
+    for i, area in enumerate(st.session_state['oneway_areas']):
+        col1, col2 = st.sidebar.columns([3, 1])
+        with col1:
+            st.sidebar.write(f" Đường một chiều #{i+1}")
+        with col2:
+            if st.sidebar.button("❌", key=f"del_oneway_{i}"):
+                st.session_state['oneway_areas'].pop(i)
+                st.rerun()
+    if st.sidebar.button("Xóa tất cả đường một chiều"):
+        st.session_state['oneway_areas'] = []
+        st.rerun()
+else:
+    st.sidebar.info("Chưa có đường một chiều nào.")
+
+# Legacy blocking geometries
+if st.session_state['blocking_geometries']:
+    st.sidebar.warning(f" {len(st.session_state['blocking_geometries'])} vùng cấm cũ")
+    if st.sidebar.button("Xóa tất cả vùng cấm cũ"):
+        st.session_state['blocking_geometries'] = []
+        st.rerun()
 
 # Phần tìm đường ở cuối trang
 st.divider()
 if st.session_state['current_route']:
     st.header("Tìm đường mới")
-    st.info("💡 Để tìm tuyến đường mới, nhập địa chỉ bên dưới và nhấn 'Tìm đường'")
+    st.info("Để tìm tuyến đường mới, nhập địa chỉ bên dưới và nhấn 'Tìm đường'")
 else:
     st.header("Tìm đường")
     st.info("Nhập địa chỉ điểm bắt đầu và điểm đến để tìm tuyến đường tối ưu")
@@ -332,7 +456,9 @@ if st.button("Tìm đường", type="primary"):
             payload = {
                 "start_address": start_address,
                 "end_address": end_address,
-                "blocking_geometries": st.session_state['blocking_geometries']
+                "blocking_geometries": st.session_state['blocking_geometries'],
+                "flood_areas": st.session_state['flood_areas'],
+                "ban_areas": st.session_state['ban_areas']
             }
 
             response = requests.post(
@@ -343,12 +469,17 @@ if st.button("Tìm đường", type="primary"):
             response.raise_for_status()
             result = response.json()
 
-            # LƯU ROUTE VÀO SESSION STATE
-            st.session_state['current_route'] = result
-            
-            # HIỂN THỊ KẾT QUẢ
-            st.success("Tìm thấy đường đi!")
-            st.rerun()  # Cập nhật bản đồ để hiển thị route
+            # Check if there's an error in the response
+            if "error" in result:
+                st.error(f"Không tìm thấy đường đi: {result['error']}")
+                st.session_state['current_route'] = None
+            else:
+                # LƯU ROUTE VÀO SESSION STATE
+                st.session_state['current_route'] = result
+                
+                # HIỂN THỊ KẾT QUẢ
+                st.success("Tìm thấy đường đi!")
+                st.rerun()  # Cập nhật bản đồ để hiển thị route
 
         except Exception as e:
             st.error(f"Lỗi: {e}")

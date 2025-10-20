@@ -30,7 +30,15 @@ class RouteRequest(BaseModel):
     end_point: Point
     blocking_geometries: List[Dict[str, Any]] = Field(
         default=[],
-        description="danh sách các đối tượng geojson (polygon, linestring, point) đại diện cho vùng cấm hoặc khu ngập"
+        description="danh sách các đối tượng geojson (polygon, linestring, point) đại diện cho vùng cấm (legacy support)"
+    )
+    flood_areas: List[Dict[str, Any]] = Field(
+        default=[],
+        description="danh sách các đối tượng geojson đại diện cho vùng ngập (tăng gấp đôi trọng số)"
+    )
+    ban_areas: List[Dict[str, Any]] = Field(
+        default=[],
+        description="danh sách các đối tượng geojson đại diện cho vùng cấm (chặn hoàn toàn)"
     )
 
 
