@@ -8,10 +8,8 @@ import networkx as nx
 from pathlib import Path
 
 # --- Cấu hình ---
-PREVIEW_SEGMENT_URL = "http://127.0.0.1:8000/api/v1/analysis/preview-segment"
-GET_ROUTE_URL = "http://127.0.0.1:8000/api/v1/routing/get-route"
-SAVE_BLOCKING_URL = "http://127.0.0.1:8000/api/v1/analysis/save-blocking"
 GEOCODING_URL = "http://127.0.0.1:8000/api/v1/geocoding/loc-to-coords"
+FIND_ROUTE_URL = "http://127.0.0.1:8000/api/v1/routing/find-standard-route"
 
 # File lưu graph
 GRAPH_FILE = Path("src/models/graph/vinhtuy.graphml")
@@ -23,16 +21,19 @@ if 'blocking_geometries' not in st.session_state:
 if 'custom_graph' not in st.session_state:
     st.session_state['custom_graph'] = None
 
+if 'current_route' not in st.session_state:
+    st.session_state['current_route'] = None
+
 
 def load_or_create_graph():
     """Load graph từ file hoặc tạo mới nếu chưa có"""
     if GRAPH_FILE.exists():
-        st.info(f"📂 Đang load graph từ file {GRAPH_FILE}...")
+        st.info(f"Đang load graph từ file {GRAPH_FILE}...")
         G = ox.load_graphml(GRAPH_FILE)
-        st.success("✅ Đã load graph từ cache!")
+        st.success("Đã load graph từ cache!")
         return G
     else:
-        st.warning("⚠️ Chưa có file cache. Đang tải từ OSM (có thể mất vài phút)...")
+        st.warning("Chưa có file cache. Đang tải từ OSM ...")
         places_names = [
             "Phường Vĩnh Tuy, Hà Nội, Việt Nam",
             "Phường Mai Động, Hà Nội, Việt Nam",
@@ -58,7 +59,7 @@ def load_or_create_graph():
 
         # Lưu lại
         ox.save_graphml(G, GRAPH_FILE)
-        st.success(f"💾 Đã lưu graph vào {GRAPH_FILE}. Lần sau sẽ load nhanh hơn!")
+        st.success(f"Đã lưu graph vào {GRAPH_FILE}. Lần sau sẽ load nhanh hơn!")
 
         return G
 
@@ -72,7 +73,6 @@ col1, col2 = st.columns([3, 2])  # 3 phần cho bản đồ, 2 phần cho bảng
 with col1:
     st.header("Bản đồ tương tác")
 
-    # ===== THAY ĐỔI LOGIC TẠO BẢN ĐỒ =====
     # Load custom graph nếu chưa có
     if st.session_state['custom_graph'] is None:
         with st.spinner("Đang tải bản đồ từ OSMnx..."):
@@ -105,7 +105,7 @@ with col1:
     nodes = ox.graph_to_gdfs(G_latlon, edges=False)
     edges = ox.graph_to_gdfs(G_latlon, nodes=False)
 
-    # Tính bounds từ EDGES (chứ không phải nodes) để chặt chẽ hơn
+    # Tính bounds từ EDGES
     min_lat = edges.geometry.bounds['miny'].min()
     max_lat = edges.geometry.bounds['maxy'].max()
     min_lon = edges.geometry.bounds['minx'].min()
@@ -125,14 +125,14 @@ with col1:
     m = folium.Map(
         location=[center_lat, center_lon],
         zoom_start=15,
-        min_zoom=14,  # Không cho zoom out nhiều
+        min_zoom=14,
         max_zoom=18,
         max_bounds=bounds,
         max_bounds_viscosity=1.0
     )
     m.fit_bounds(bounds)
 
-    # 2. Thêm plugin Draw vào bản đồ
+    # Thêm plugin Draw vào bản đồ
     Draw(export=True).add_to(m)
 
     # Vẽ lại các vùng/đường cấm đã được lưu trong session state
@@ -140,7 +140,53 @@ with col1:
         for geom in st.session_state['blocking_geometries']:
             folium.GeoJson(geom, style_function=lambda x: {'color': 'red', 'weight': 3, 'fillOpacity': 0.3}).add_to(m)
 
-    # 3. Hiển thị bản đồ trong Streamlit
+    # Vẽ route hiện tại nếu có
+    if st.session_state['current_route']:
+        route_data = st.session_state['current_route']
+        
+        # Vẽ đường đi
+        route_layer = folium.GeoJson(
+            route_data['route'],
+            style_function=lambda x: {
+                'color': 'green',
+                'weight': 6,
+                'opacity': 0.9
+            }
+        )
+        route_layer.add_to(m)
+        
+        # Thêm marker điểm đầu/cuối với thông tin chi tiết
+        coords = route_data['route']['geometry']['coordinates']
+        
+        # Marker điểm bắt đầu
+        folium.Marker(
+            [coords[0][1], coords[0][0]],
+            popup=f"""
+            <div style="font-family: Arial; font-size: 14px;">
+                <h4 style="color: #1f77b4; margin: 0;">🚀 Điểm bắt đầu</h4>
+                <p style="margin: 5px 0;"><strong>Khoảng cách:</strong> {route_data['distance']/1000:.2f} km</p>
+                <p style="margin: 5px 0;"><strong>Thời gian:</strong> {route_data['duration']:.0f} phút</p>
+            </div>
+            """,
+            tooltip="Điểm bắt đầu",
+            icon=folium.Icon(color='blue', icon='play', prefix='fa')
+        ).add_to(m)
+        
+        # Marker điểm đến
+        folium.Marker(
+            [coords[-1][1], coords[-1][0]],
+            popup=f"""
+            <div style="font-family: Arial; font-size: 14px;">
+                <h4 style="color: #d62728; margin: 0;">🏁 Điểm đến</h4>
+                <p style="margin: 5px 0;"><strong>Khoảng cách:</strong> {route_data['distance']/1000:.2f} km</p>
+                <p style="margin: 5px 0;"><strong>Thời gian:</strong> {route_data['duration']:.0f} phút</p>
+            </div>
+            """,
+            tooltip="Điểm đến",
+            icon=folium.Icon(color='red', icon='stop', prefix='fa')
+        ).add_to(m)
+
+    # Hiển thị bản đồ trong Streamlit
     output = st_folium(m, width=800, height=600)
 
 with col2:
@@ -169,16 +215,34 @@ with col2:
 
         if st.button("Xem trước & Lấy GeoJSON"):
             if all([road_name_ban, from_address, to_address]):
-                payload = {
-                    "street_name": road_name_ban,
-                    "start_address": f"{from_address}, {road_name_ban}",        #vi du 74 Phố Kim Ngưu
-                    "end_address": f"{to_address}, {road_name_ban}"
-                }
                 try:
-                    st.info("Đang gọi API để lấy geometry đoạn đường...")
-                    response = requests.post(PREVIEW_SEGMENT_URL, json=payload)
-                    response.raise_for_status()
-                    segment_geojson = response.json()
+                    st.info("Đang lấy tọa độ từ địa chỉ...")
+                    
+                    # Gọi API geocoding cho điểm bắt đầu
+                    start_payload = {"address": f"{from_address}, {road_name_ban}"}
+                    start_loc_res = requests.post(GEOCODING_URL, json=start_payload)
+                    start_loc_res.raise_for_status()
+                    
+                    # Gọi API geocoding cho điểm kết thúc
+                    end_payload = {"address": f"{to_address}, {road_name_ban}"}
+                    end_loc_res = requests.post(GEOCODING_URL, json=end_payload)
+                    end_loc_res.raise_for_status()
+                    
+                    start_coords = start_loc_res.json()
+                    end_coords = end_loc_res.json()
+                    
+                    st.success("Đã lấy tọa độ thành công!")
+                    st.write(f"Điểm bắt đầu: {start_coords}")
+                    st.write(f"Điểm kết thúc: {end_coords}")
+                    
+                    # Tạo GeoJSON LineString từ 2 điểm
+                    segment_geojson = {
+                        "type": "LineString",
+                        "coordinates": [
+                            [start_coords["longitude"], start_coords["latitude"]],
+                            [end_coords["longitude"], end_coords["latitude"]]
+                        ]
+                    }
 
                     st.write("GeoJSON của đoạn đường:")
                     st.json(segment_geojson)
@@ -187,6 +251,10 @@ with col2:
                         st.success("Đã thêm. Bản đồ sẽ được cập nhật.")
                         st.rerun()
 
+                except requests.exceptions.HTTPError as e:
+                    st.error(f"Lỗi HTTP: {e}")
+                    if hasattr(e.response, 'text'):
+                        st.error(f"Chi tiết: {e.response.text}")
                 except Exception as e:
                     st.error(f"Lỗi khi lấy dữ liệu: {e}")
             else:
@@ -200,35 +268,60 @@ with col2:
         oneway_to = st.text_input("Đến địa chỉ", key="oneway_to_addr")
 
 # --- Sidebar để hiển thị trạng thái ---
+st.sidebar.header("Thông tin tuyến đường")
+if st.session_state['current_route']:
+    route_data = st.session_state['current_route']
+    st.sidebar.success("Đã tìm thấy tuyến đường!")
+    
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        st.metric("Khoảng cách", f"{route_data['distance'] / 1000:.2f} km")
+    with col2:
+        st.metric("Thời gian", f"{route_data['duration']:.0f} phút")
+    
+    if st.sidebar.button("Xóa tuyến đường", type="secondary"):
+        st.session_state['current_route'] = None
+        st.rerun()
+else:
+    st.sidebar.info("Chưa có tuyến đường nào được tìm.")
+
+st.sidebar.divider()
 st.sidebar.header("Các vùng/đường cấm đã chọn")
 if st.session_state['blocking_geometries']:
     st.sidebar.success(f"Đang áp dụng {len(st.session_state['blocking_geometries'])} điều kiện.")
     st.sidebar.json(st.session_state['blocking_geometries'])
-    if st.sidebar.button("Xóa tất cả"):
+    if st.sidebar.button("Xóa tất cả vùng cấm"):
         st.session_state['blocking_geometries'] = []
         st.rerun()
 else:
-    st.sidebar.info("Chưa có lựa chọn nào.")
+    st.sidebar.info("Chưa có vùng cấm nào.")
 
 # Phần tìm đường ở cuối trang
 st.divider()
-st.header("🚗 Tìm đường thông minh")
+if st.session_state['current_route']:
+    st.header("Tìm đường mới")
+    st.info("💡 Để tìm tuyến đường mới, nhập địa chỉ bên dưới và nhấn 'Tìm đường'")
+else:
+    st.header("Tìm đường")
+    st.info("Nhập địa chỉ điểm bắt đầu và điểm đến để tìm tuyến đường tối ưu")
 
 col1, col2 = st.columns(2)
 
 with col1:
     start_address = st.text_input(
-        "🔵 Điểm bắt đầu",
-        placeholder="VD: 119 Lê Thanh Nghị, Hà Nội"
+        "Điểm bắt đầu",
+        placeholder="VD: 119 Lê Thanh Nghị, Hà Nội",
+        help="Nhập địa chỉ điểm xuất phát"
     )
 
 with col2:
     end_address = st.text_input(
-        "🔴 Điểm đến",
-        placeholder="VD: Cầu Vĩnh Tuy, Hà Nội"
+        "Điểm đến",
+        placeholder="VD: Cầu Vĩnh Tuy, Hà Nội",
+        help="Nhập địa chỉ điểm đích"
     )
 
-if st.button("🔍 Tìm đường", type="primary"):
+if st.button("Tìm đường", type="primary"):
     if not start_address or not end_address:
         st.error("Vui lòng nhập đủ địa chỉ!")
         st.stop()
@@ -243,48 +336,19 @@ if st.button("🔍 Tìm đường", type="primary"):
             }
 
             response = requests.post(
-                "http://127.0.0.1:8000/api/v1/routing/find-route",
+                FIND_ROUTE_URL,
                 json=payload,
                 timeout=30
             )
             response.raise_for_status()
             result = response.json()
 
+            # LƯU ROUTE VÀO SESSION STATE
+            st.session_state['current_route'] = result
+            
             # HIỂN THỊ KẾT QUẢ
-            st.success("✅ Tìm thấy đường đi!")
-
-            col_metric1, col_metric2 = st.columns(2)
-            with col_metric1:
-                st.metric("Khoảng cách", f"{result['distance'] / 1000:.2f} km")
-            with col_metric2:
-                st.metric("Thời gian", f"{result['duration']:.0f} phút")
-
-            # VẼ ĐƯỜNG LÊN BẢN ĐỒ
-            route_layer = folium.GeoJson(
-                result['route'],
-                style_function=lambda x: {
-                    'color': 'green',
-                    'weight': 5,
-                    'opacity': 0.8
-                }
-            )
-            route_layer.add_to(m)
-
-            # Thêm marker điểm đầu/cuối
-            coords = result['route']['geometry']['coordinates']
-            folium.Marker(
-                [coords[0][1], coords[0][0]],
-                popup="Điểm bắt đầu",
-                icon=folium.Icon(color='blue', icon='play')
-            ).add_to(m)
-
-            folium.Marker(
-                [coords[-1][1], coords[-1][0]],
-                popup="Điểm đến",
-                icon=folium.Icon(color='red', icon='stop')
-            ).add_to(m)
-
-            st.rerun()  # Cập nhật bản đồ
+            st.success("Tìm thấy đường đi!")
+            st.rerun()  # Cập nhật bản đồ để hiển thị route
 
         except Exception as e:
-            st.error(f"❌ Lỗi: {e}")
+            st.error(f"Lỗi: {e}")

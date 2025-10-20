@@ -9,6 +9,9 @@ from src.app.schemas.route_input_format import RouteRequest, Point
 _G_base: Optional[nx.MultiDiGraph] = None
 _flood_model = None
 
+# ✅ Định nghĩa router TRƯỚC khi sử dụng
+router = APIRouter()
+
 
 def init_routes(G_base: nx.MultiDiGraph, flood_model):
     """Khởi tạo router với graph và model đã load từ main.py"""
@@ -16,9 +19,6 @@ def init_routes(G_base: nx.MultiDiGraph, flood_model):
     _G_base = G_base
     _flood_model = flood_model
     return router
-
-
-router = APIRouter()
 
 
 @router.post("/find-route", summary="Tìm đường thông minh với model dự đoán ngập")
@@ -52,6 +52,12 @@ def find_standard_route_endpoint(
                 status_code=400,
                 detail="Không thể tìm thấy tọa độ cho địa chỉ đã nhập"
             )
+
+        # Log blocking geometries để debug
+        print(f"Received {len(blocking_geometries or [])} blocking geometries")
+        if blocking_geometries:
+            for i, geom in enumerate(blocking_geometries):
+                print(f"Blocking geometry {i}: {type(geom)} - {list(geom.keys()) if isinstance(geom, dict) else 'Not a dict'}")
 
         route_request = RouteRequest(
             start_point=Point(

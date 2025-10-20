@@ -5,6 +5,8 @@ from src.app.core.config import DATABASE_URL
 
 engine = create_engine(DATABASE_URL)
 
+#CRS: hệ quy chiếu, bao gồm geographic CRS: định vị điểm trên bề mặt cong của trái đất, đang sử dụng WGS 84 (ESPG 4326): xác định vị trí dự trên lat/lon
+#project CRS: hệ quy chiếu lên bản đồ phẳng để tính khoảng cách 
 
 def load_graph_from_db():
     """Tải dữ liệu bản đồ từ PostGIS và tạo đồ thị OSMnx"""
@@ -39,17 +41,17 @@ def load_graph_from_db():
         except Exception:
             return False
 
-    # Ưu tiên dùng CRS từ DB; nếu thiếu và giá trị toạ độ lớn, giả định UTM 48N (EPSG:32648) cho Hà Nội
+    # Ưu tiên dùng CRS từ DB; nếu thiếu và giá trị toạ độ lớn, coi như đó đang là data của project CRS=  UTM 48N (EPSG:32648) cho Hà Nội
     if nodes_gdf.crs is None and _looks_projected(nodes_gdf):
         nodes_gdf.set_crs(epsg=32648, inplace=True)
     if edges_gdf.crs is None and _looks_projected(edges_gdf):
         edges_gdf.set_crs(epsg=32648, inplace=True)
 
-    # Chuyển về WGS84
+    # Chuyển về WGS84 để hiển thị theo tọa độ của cầu
     if nodes_gdf.crs is None:
         nodes_gdf.set_crs(epsg=4326, inplace=True)
     elif nodes_gdf.crs.to_epsg() != 4326:
-        nodes_gdf = nodes_gdf.to_crs(epsg=4326)
+        nodes_gdf = nodes_gdf.to_crs(epsg=4326) #chuyen tu project crs sang geo crs de co toa do dung
 
     if edges_gdf.crs is None:
         edges_gdf.set_crs(epsg=4326, inplace=True)
