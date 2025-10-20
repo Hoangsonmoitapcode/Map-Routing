@@ -9,14 +9,14 @@ def load_flood_model():
     print("Loading AI model...")
 
     if not os.path.exists(MODEL_PATH):
-        print(f"⚠️  Model không tồn tại tại: {MODEL_PATH}")
+        print(f"Model không tồn tại tại: {MODEL_PATH}")
         print("Chỉ sử dụng chế độ định tuyến tiêu chuẩn.")
         return None
 
     try:
         flood_model = joblib.load(MODEL_PATH)
-        print("✅ AI model loaded successfully.")
+        print("AI model loaded successfully.")
         return flood_model
     except Exception as e:
-        print(f"❌ Lỗi khi load model: {e}")
+        print(f"Lỗi khi load model: {e}")
         return None
