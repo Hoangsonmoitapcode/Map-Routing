@@ -1,4 +1,3 @@
-# Smart Map Routing System
 
 A comprehensive smart routing system that provides intelligent pathfinding with flood prediction capabilities, geocoding services, and interactive map visualization. The system is designed for urban areas in Vietnam, specifically optimized for Hanoi districts.
 
@@ -54,45 +53,12 @@ Map-Routing/
    cd Map-Routing
    ```
 
-2. **Set up environment variables**
-   Create a `.env` file in the root directory:
-   ```env
-   DATABASE_URL=postgresql://postgres:123456@localhost:5432/map_route_dtb
-   WEATHER_API_KEY=your_weather_api_key
-   LATITUDE=21.0245
-   LONGITUDE=105.8412
-   MODEL_PATH=src/app/models/flood_model.joblib
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Run with Docker Compose**
+2. **Run with Docker Compose**
    ```bash
    docker-compose up --build
    ```
 
-### Manual Setup (Alternative)
-
-1. **Start PostgreSQL with PostGIS**
-   ```bash
-   # Using Docker
-   docker run --name postgis_db -e POSTGRES_PASSWORD=123456 -p 5432:5432 -d postgis/postgis:15-3.3
-   ```
-
-2. **Initialize the database**
-   ```bash
-   python src/database/save_graph.py
-   ```
-
-3. **Start the FastAPI server**
-   ```bash
-   python main.py
-   ```
-
-4. **Start the Streamlit frontend**
+3. **Start the Streamlit frontend**
    ```bash
    streamlit run src/frontend/app_streamlit.py
    ```
@@ -165,28 +131,6 @@ The system uses PostGIS for spatial data storage:
 - **Graph Cache**: Pre-computed graph structures for faster loading
 - **API Cache**: Cached responses for geocoding and routing requests
 
-## 🧪 Testing
-
-### Run Tests
-```bash
-# Navigate to test directory
-cd test_files
-
-# Run pathfinding tests
-python test_api_pf.py
-
-# Run folium visualization tests
-python test_folium.py
-```
-
-### Test Coverage
-- API endpoint testing
-- Pathfinding algorithm validation
-- Geocoding service testing
-- Map visualization testing
-
-## 🐳 Docker Deployment
-
 ### Production Deployment
 ```bash
 # Build and start all services
@@ -217,47 +161,5 @@ docker-compose down
 - Health check endpoints
 - Performance metrics
 - Error logging and tracking
-
-## 🤝 Contributing
-
-### Development Setup
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Submit a pull request
-
-### Code Structure
-- Follow PEP 8 style guidelines
-- Add type hints for functions
-- Include docstrings for classes and methods
-- Write unit tests for new features
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🆘 Support
-
-### Common Issues
-1. **Database Connection**: Ensure PostgreSQL is running and accessible
-2. **Missing Dependencies**: Run `pip install -r requirements.txt`
-3. **Port Conflicts**: Check if ports 8000 and 8501 are available
-4. **Memory Issues**: Increase Docker memory allocation for large graphs
-
-### Getting Help
-- Check the API documentation at `/docs`
-- Review the test files for usage examples
-- Open an issue for bug reports or feature requests
-
-## 🔮 Future Enhancements
-
-- Real-time traffic data integration
-- Multi-modal transportation support
-- Advanced flood prediction models
-- Mobile application development
-- Performance optimization for larger datasets
-
----
 
 **Note**: This system is optimized for Vietnamese urban areas, particularly Hanoi. For other regions, you may need to adjust the geocoding parameters and coordinate systems.
