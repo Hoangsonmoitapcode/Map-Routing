@@ -1,4 +1,0 @@
-@get.get_route
-@post.oneway_road
-@post.restrict_street
-@post.restrict_are
